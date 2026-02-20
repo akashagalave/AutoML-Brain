@@ -1,3 +1,4 @@
+optuna
 fastapi
 uvicorn[standard]
 pydantic

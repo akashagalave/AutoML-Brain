@@ -1,7 +1,7 @@
 import pandas as pd
 import logging
 from pathlib import Path
-
+from sklearn.model_selection import train_test_split
 
 
 logger = logging.getLogger("data_ingestion")
@@ -16,37 +16,45 @@ if not logger.handlers:
     logger.addHandler(console_handler)
 
 
-
 def load_data(path: Path) -> pd.DataFrame:
     df = pd.read_csv(path)
     logger.info(f"Loaded dataset with shape: {df.shape}")
     return df
 
 
-
 def clean_data(df: pd.DataFrame) -> pd.DataFrame:
     df = df.drop_duplicates()
-
     df["TotalCharges"] = pd.to_numeric(df["TotalCharges"], errors="coerce")
     df["TotalCharges"] = df["TotalCharges"].fillna(0)
-
     logger.info("Basic cleaning completed.")
     return df
 
 
-
 def split_data(df: pd.DataFrame):
 
-    train = df[df["tenure"] <= 24]
-    validation = df[(df["tenure"] > 24) & (df["tenure"] <= 48)]
-    test = df[df["tenure"] > 48]
+    # 70% train
+    train_df, temp_df = train_test_split(
+        df,
+        test_size=0.3,
+        stratify=df["Churn"],
+        shuffle=True,
+        random_state=42
+    )
 
-    logger.info(f"Train shape: {train.shape}")
-    logger.info(f"Validation shape: {validation.shape}")
-    logger.info(f"Test shape: {test.shape}")
+    # 15% validation, 15% test
+    val_df, test_df = train_test_split(
+        temp_df,
+        test_size=0.5,
+        stratify=temp_df["Churn"],
+        shuffle=True,
+        random_state=42
+    )
 
-    return train, validation, test
+    logger.info(f"Train shape: {train_df.shape}")
+    logger.info(f"Validation shape: {val_df.shape}")
+    logger.info(f"Test shape: {test_df.shape}")
 
+    return train_df, val_df, test_df
 
 
 def save_splits(train, validation, test, output_dir: Path):
@@ -58,8 +66,6 @@ def save_splits(train, validation, test, output_dir: Path):
     test.to_csv(output_dir / "test.csv", index=False)
 
     logger.info("Saved train, validation, test splits.")
-
-
 
 
 def main():

@@ -1,7 +1,6 @@
 import pandas as pd
 from pathlib import Path
 from feature_engineering import build_features
-import joblib
 
 
 ROOT = Path(__file__).parent.parent.parent
