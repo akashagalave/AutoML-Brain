@@ -83,13 +83,13 @@ def build_features(df, mode="train", transformer=None):
         X_transformed = transformer.fit_transform(X)
 
         # Save transformer
-        Path("models/automl_brain").mkdir(parents=True, exist_ok=True)
-        joblib.dump(transformer, "models/automl_brain/feature_transformer.pkl")
+        Path("models/feature_artifacts").mkdir(parents=True, exist_ok=True)
+        joblib.dump(transformer, "models/feature_artifacts/feature_transformer.pkl")
         logger.info("Saved feature transformer artifact.")
 
     else:
         if transformer is None:
-            transformer = joblib.load("models/automl_brain/feature_transformer.pkl")
+            transformer = joblib.load("models/feature_artifacts/feature_transformer.pkl")
         X_transformed = transformer.transform(X)
 
     X_transformed = pd.DataFrame(

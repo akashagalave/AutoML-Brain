@@ -13,3 +13,4 @@ redis
 confluent-kafka
 seaborn
 awscli
+shap

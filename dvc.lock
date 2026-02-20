@@ -69,8 +69,8 @@ stages:
       size: 238340
     - path: src/features/feature_engineering.py
       hash: md5
-      md5: da34e9ade790e654d6c3de1048d27148
-      size: 2538
+      md5: 5e3b8119cf8c1dfab5395b8e483b99de
+      size: 2553
     - path: src/features/run_feature_engineering.py
       hash: md5
       md5: 3501e2000786422e0e0f3d047c3b685a
@@ -88,7 +88,44 @@ stages:
       hash: md5
       md5: e7ae37b3bcb4c20daa027b9b4fef515f
       size: 405714
-    - path: models/automl_brain/feature_transformer.pkl
+    - path: models/feature_artifacts/feature_transformer.pkl
       hash: md5
       md5: bf715c652620ce1ee87927c3a4b51be3
       size: 6770
+  model_building:
+    cmd: python src/model/model_building.py
+    deps:
+    - path: data/processed/train_features.csv
+      hash: md5
+      md5: 9571b36d11e9926e1a63709b6e299839
+      size: 820649
+    - path: data/processed/validation_features.csv
+      hash: md5
+      md5: e7ae37b3bcb4c20daa027b9b4fef515f
+      size: 405714
+    - path: src/model/model_building.py
+      hash: md5
+      md5: ae21a73ddf694ba60060d45ba8d837e3
+      size: 3519
+    outs:
+    - path: models/model_artifacts
+      hash: md5
+      md5: e8db8d972ee01edb493b5c4ccdadee46.dir
+      size: 1557770
+      nfiles: 2
+    - path: reports/evaluation/metrics.json
+      hash: md5
+      md5: 3d28763b0a02f66ba32a0dcbeeaa6b57
+      size: 113
+    - path: reports/shap/shap_global_importance.csv
+      hash: md5
+      md5: 0482c30a7909cadb215df199be52a4b4
+      size: 1075
+    - path: reports/shap/shap_summary.png
+      hash: md5
+      md5: 38f3a92ea0e67f6c01e2cae50910bc6c
+      size: 97066
+    - path: reports/shap/shap_summary_bar.png
+      hash: md5
+      md5: fc14463ed9579f5c2ddc31ef8568e188
+      size: 25457

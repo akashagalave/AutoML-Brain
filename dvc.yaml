@@ -30,4 +30,16 @@ stages:
       - data/processed/train_features.csv
       - data/processed/validation_features.csv
       - data/processed/test_features.csv
-      - models/automl_brain/feature_transformer.pkl
+      - models/feature_artifacts/feature_transformer.pkl
+  model_building:
+    cmd: python src/model/model_building.py
+    deps:
+      - src/model/model_building.py
+      - data/processed/train_features.csv
+      - data/processed/validation_features.csv
+    outs:
+      - models/model_artifacts
+      - reports/evaluation/metrics.json
+      - reports/shap/shap_global_importance.csv
+      - reports/shap/shap_summary.png
+      - reports/shap/shap_summary_bar.png
