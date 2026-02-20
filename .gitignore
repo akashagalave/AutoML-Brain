@@ -1,1 +1,21 @@
 brain
+# Ignore everything inside data
+/data/**
+
+# Allow directory traversal
+!data/
+!data/**/
+
+# Secrets
+rclone.conf
+decoded-rclone.conf
+encoded.txt
+*.env
+
+# Allow DVC files
+!data/**/*.dvc
+!data/**/*.dvc.lock
+
+# Allow nested gitignore
+!data/**/.gitignore
+
