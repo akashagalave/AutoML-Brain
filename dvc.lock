@@ -9,8 +9,8 @@ stages:
       size: 977501
     - path: src/data/data_ingestion.py
       hash: md5
-      md5: d55fc01e6c9b9561c97729cfeb4793c8
-      size: 2493
+      md5: 724e0ad07b2a84577fcd534130a8a85b
+      size: 2009
     outs:
     - path: data/raw/test.csv
       hash: md5
@@ -24,3 +24,71 @@ stages:
       hash: md5
       md5: d0d27c73b2e888e2df3c6a38430db919
       size: 222552
+  data_preprocessing:
+    cmd: python src/data/data_preprocessing.py
+    deps:
+    - path: data/raw/test.csv
+      hash: md5
+      md5: f6c5b30b696749599d3614355deb3f4c
+      size: 311826
+    - path: data/raw/train.csv
+      hash: md5
+      md5: 500100208090a5e74ff3d74c8329521a
+      size: 445099
+    - path: src/data/data_preprocessing.py
+      hash: md5
+      md5: f70942cdbfbc4e81382838ed8c57a192
+      size: 3540
+    outs:
+    - path: data/interim/test_cleaned.csv
+      hash: md5
+      md5: 6a9673b25b5166bbd5e37247fc7ef1be
+      size: 335283
+    - path: data/interim/train_cleaned.csv
+      hash: md5
+      md5: 522e4d88ce6d670f5c0e4e58c638cb55
+      size: 457883
+    - path: data/interim/validation_cleaned.csv
+      hash: md5
+      md5: 7db20c367c66760387773bc5984ceca9
+      size: 238340
+  feature_engineering:
+    cmd: python src/features/run_feature_engineering.py
+    deps:
+    - path: data/interim/test_cleaned.csv
+      hash: md5
+      md5: 6a9673b25b5166bbd5e37247fc7ef1be
+      size: 335283
+    - path: data/interim/train_cleaned.csv
+      hash: md5
+      md5: 522e4d88ce6d670f5c0e4e58c638cb55
+      size: 457883
+    - path: data/interim/validation_cleaned.csv
+      hash: md5
+      md5: 7db20c367c66760387773bc5984ceca9
+      size: 238340
+    - path: src/features/feature_engineering.py
+      hash: md5
+      md5: da34e9ade790e654d6c3de1048d27148
+      size: 2538
+    - path: src/features/run_feature_engineering.py
+      hash: md5
+      md5: 3501e2000786422e0e0f3d047c3b685a
+      size: 1185
+    outs:
+    - path: data/processed/test_features.csv
+      hash: md5
+      md5: 64b902d6abd5603a685a3aeeaa35c128
+      size: 567880
+    - path: data/processed/train_features.csv
+      hash: md5
+      md5: 9571b36d11e9926e1a63709b6e299839
+      size: 820649
+    - path: data/processed/validation_features.csv
+      hash: md5
+      md5: e7ae37b3bcb4c20daa027b9b4fef515f
+      size: 405714
+    - path: models/automl_brain/feature_transformer.pkl
+      hash: md5
+      md5: bf715c652620ce1ee87927c3a4b51be3
+      size: 6770
