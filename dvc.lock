@@ -1,0 +1,26 @@
+schema: '2.0'
+stages:
+  data_ingestion:
+    cmd: python src/data/data_ingestion.py
+    deps:
+    - path: data/external/Chrun.csv
+      hash: md5
+      md5: 0f9de68e012bd3aed5fa7cdc9fc421af
+      size: 977501
+    - path: src/data/data_ingestion.py
+      hash: md5
+      md5: d55fc01e6c9b9561c97729cfeb4793c8
+      size: 2493
+    outs:
+    - path: data/raw/test.csv
+      hash: md5
+      md5: f6c5b30b696749599d3614355deb3f4c
+      size: 311826
+    - path: data/raw/train.csv
+      hash: md5
+      md5: 500100208090a5e74ff3d74c8329521a
+      size: 445099
+    - path: data/raw/validation.csv
+      hash: md5
+      md5: d0d27c73b2e888e2df3c6a38430db919
+      size: 222552
