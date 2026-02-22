@@ -1,7 +1,7 @@
-import pandas as pd
+import numpy as np
 
 
-def _tenure_bucket_fast(t: int) -> str:
+def _tenure_bucket_fast(t):
     if t <= 12:
         return "0-1y"
     elif t <= 24:
@@ -12,38 +12,23 @@ def _tenure_bucket_fast(t: int) -> str:
         return "4-6y"
 
 
-def build_feature_dataframe(
+def build_feature_vector(
     raw: dict,
     feature_stats: dict,
     feature_columns: list,
-    categorical_columns: list
-) -> pd.DataFrame:
-    """
-    Ultra-optimized inference feature builder.
-    Fully aligned with training pipeline.
-    Avoids dtype scanning and unnecessary operations.
-    """
-
-    # =========================
-    # BASIC TYPE FIXES
-    # =========================
-
-    raw["TotalCharges"] = float(raw.get("TotalCharges", 0) or 0)
-    raw["SeniorCitizen"] = int(raw.get("SeniorCitizen", 0))
-
+    categorical_columns: list,
+    category_maps: dict,
+):
+    # ---- Derived features ----
+    total_charges = float(raw["TotalCharges"])
     tenure = int(raw["tenure"])
     monthly = float(raw["MonthlyCharges"])
-    total = raw["TotalCharges"]
 
-    # =========================
-    # FAST DERIVED FEATURES
-    # =========================
+    charges_per_month = total_charges / (tenure + 1)
+    clv_proxy = monthly * tenure
+    avg_charge_per_tenure = total_charges / (tenure + 1)
 
-    raw["tenure_bucket"] = _tenure_bucket_fast(tenure)
-
-    raw["charges_per_month"] = total / (tenure + 1)
-    raw["clv_proxy"] = monthly * tenure
-    raw["avg_charge_per_tenure"] = total / (tenure + 1)
+    tenure_bucket = _tenure_bucket_fast(tenure)
 
     service_cols = [
         "OnlineSecurity",
@@ -55,48 +40,62 @@ def build_feature_dataframe(
     ]
 
     num_services = sum(
-        1 for col in service_cols if raw.get(col) == "Yes"
+        1 for c in service_cols if raw[c] == "Yes"
     )
-
-    raw["num_services"] = num_services
-    raw["service_density"] = num_services / len(service_cols)
+    service_density = num_services / len(service_cols)
 
     contract_map = {
         "Month-to-month": 0,
         "One year": 1,
-        "Two year": 2
+        "Two year": 2,
     }
 
-    raw["contract_strength"] = contract_map.get(raw["Contract"], 0)
+    contract_strength = contract_map[raw["Contract"]]
 
-    monthly_75 = feature_stats["monthly_charge_75th"]
+    high_monthly_charge = int(
+        monthly > feature_stats["monthly_charge_75th"]
+    )
 
-    raw["high_monthly_charge"] = int(monthly > monthly_75)
-    raw["is_fiber"] = int(raw["InternetService"] == "Fiber optic")
-    raw["is_electronic_check"] = int(
+    is_fiber = int(raw["InternetService"] == "Fiber optic")
+    is_electronic_check = int(
         raw["PaymentMethod"] == "Electronic check"
     )
 
-    raw["tenure_contract_interaction"] = (
-        tenure * raw["contract_strength"]
+    tenure_contract_interaction = tenure * contract_strength
+
+    high_charge_no_security = int(
+        high_monthly_charge == 1
+        and raw["OnlineSecurity"] == "No"
     )
 
-    raw["high_charge_no_security"] = int(
-        raw["high_monthly_charge"] == 1
-        and raw.get("OnlineSecurity") == "No"
-    )
+    # ---- Build final feature dict ----
+    full_features = raw.copy()
 
-    # =========================
-    # BUILD ORDERED ROW
-    # =========================
+    full_features.update({
+        "charges_per_month": charges_per_month,
+        "tenure_bucket": tenure_bucket,
+        "clv_proxy": clv_proxy,
+        "avg_charge_per_tenure": avg_charge_per_tenure,
+        "num_services": num_services,
+        "service_density": service_density,
+        "is_fiber": is_fiber,
+        "contract_strength": contract_strength,
+        "high_monthly_charge": high_monthly_charge,
+        "is_electronic_check": is_electronic_check,
+        "tenure_contract_interaction": tenure_contract_interaction,
+        "high_charge_no_security": high_charge_no_security,
+    })
 
-    ordered_row = [raw[col] for col in feature_columns]
+    # ---- Ordered numpy vector ----
+    vector = []
 
-    df = pd.DataFrame([ordered_row], columns=feature_columns)
+    for col in feature_columns:
+        val = full_features[col]
 
-    # Explicit categorical casting (no scanning)
-    for col in categorical_columns:
-        if col in df.columns:
-            df[col] = df[col].astype("category")
+        if col in categorical_columns:
+            # ✅ SAFE lookup (prevents KeyError like 'gender')
+            val = category_maps.get(col, {}).get(str(val), 0)
 
-    return df
+        vector.append(val)
+
+    return np.array(vector, dtype=np.float32).reshape(1, -1)

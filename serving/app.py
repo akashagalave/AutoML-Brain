@@ -10,7 +10,7 @@ from prometheus_client import CONTENT_TYPE_LATEST
 from .model_loader import load_model_assets
 from .schema import PredictionRequest, PredictionResponse
 from .config import APP_NAME, MODEL_VERSION
-from src.common.feature_builder import build_feature_dataframe
+from src.common.feature_builder import build_feature_vector
 
 # ==============================
 # Optional Redis
@@ -60,6 +60,8 @@ threshold = None
 feature_columns = None
 feature_stats = None
 categorical_columns = None
+categorical_indices = None
+category_maps = None
 
 
 # ==============================
@@ -67,7 +69,8 @@ categorical_columns = None
 # ==============================
 @app.on_event("startup")
 def preload():
-    global booster, threshold, feature_columns, feature_stats, categorical_columns
+    global booster, threshold, feature_columns, feature_stats, \
+           categorical_columns, categorical_indices, category_maps
 
     (
         booster,
@@ -75,6 +78,8 @@ def preload():
         feature_columns,
         feature_stats,
         categorical_columns,
+        categorical_indices,
+        category_maps,
     ) = load_model_assets()
 
 
@@ -105,17 +110,23 @@ def predict(request: PredictionRequest):
         if cached:
             return PredictionResponse(**json.loads(cached))
 
-    # ---------- Feature Engineering (CORRECTED) ----------
-    # IMPORTANT: positional args only
-    df = build_feature_dataframe(
+    # ---------- Numpy Feature Vector ----------
+    vector = build_feature_vector(
         input_dict,
         feature_stats,
         feature_columns,
         categorical_columns,
+        category_maps,
     )
 
     # ---------- LightGBM Prediction ----------
-    prob = float(booster.predict(df)[0])
+    prob = float(
+        booster.predict(
+            vector,
+            categorical_feature=categorical_indices
+        )[0]
+    )
+
     prediction = prob >= threshold
 
     response_data = {
