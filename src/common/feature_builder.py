@@ -1,15 +1,33 @@
 import numpy as np
 
+# ==============================
+# STATIC CONSTANTS (Module Load)
+# ==============================
 
-def _tenure_bucket_fast(t):
+SERVICE_COLS = (
+    "OnlineSecurity",
+    "OnlineBackup",
+    "DeviceProtection",
+    "TechSupport",
+    "StreamingTV",
+    "StreamingMovies",
+)
+
+CONTRACT_MAP = {
+    "Month-to-month": 0,
+    "One year": 1,
+    "Two year": 2,
+}
+
+
+def _tenure_bucket_fast(t: int) -> str:
     if t <= 12:
         return "0-1y"
-    elif t <= 24:
+    if t <= 24:
         return "1-2y"
-    elif t <= 48:
+    if t <= 48:
         return "2-4y"
-    else:
-        return "4-6y"
+    return "4-6y"
 
 
 def build_feature_vector(
@@ -19,83 +37,88 @@ def build_feature_vector(
     categorical_columns: list,
     category_maps: dict,
 ):
-    # ---- Derived features ----
-    total_charges = float(raw["TotalCharges"])
+    """
+    Ultra-optimized inference feature builder.
+
+    - No dict copy
+    - No dict update
+    - No dynamic object allocation except final vector
+    - Minimal branching
+    """
+
+    monthly_75 = feature_stats["monthly_charge_75th"]
+
+    # --- Base numeric values ---
     tenure = int(raw["tenure"])
     monthly = float(raw["MonthlyCharges"])
+    total_charges = float(raw["TotalCharges"])
 
+    # --- Derived features ---
     charges_per_month = total_charges / (tenure + 1)
     clv_proxy = monthly * tenure
     avg_charge_per_tenure = total_charges / (tenure + 1)
 
     tenure_bucket = _tenure_bucket_fast(tenure)
 
-    service_cols = [
-        "OnlineSecurity",
-        "OnlineBackup",
-        "DeviceProtection",
-        "TechSupport",
-        "StreamingTV",
-        "StreamingMovies",
-    ]
+    # Service aggregation
+    num_services = 0
+    for col in SERVICE_COLS:
+        if raw[col] == "Yes":
+            num_services += 1
 
-    num_services = sum(
-        1 for c in service_cols if raw[c] == "Yes"
-    )
-    service_density = num_services / len(service_cols)
+    service_density = num_services / 6.0
 
-    contract_map = {
-        "Month-to-month": 0,
-        "One year": 1,
-        "Two year": 2,
-    }
+    contract_strength = CONTRACT_MAP[raw["Contract"]]
 
-    contract_strength = contract_map[raw["Contract"]]
-
-    high_monthly_charge = int(
-        monthly > feature_stats["monthly_charge_75th"]
-    )
-
-    is_fiber = int(raw["InternetService"] == "Fiber optic")
-    is_electronic_check = int(
-        raw["PaymentMethod"] == "Electronic check"
-    )
+    high_monthly_charge = 1 if monthly > monthly_75 else 0
+    is_fiber = 1 if raw["InternetService"] == "Fiber optic" else 0
+    is_electronic_check = 1 if raw["PaymentMethod"] == "Electronic check" else 0
 
     tenure_contract_interaction = tenure * contract_strength
 
-    high_charge_no_security = int(
-        high_monthly_charge == 1
-        and raw["OnlineSecurity"] == "No"
+    high_charge_no_security = (
+        1 if (high_monthly_charge and raw["OnlineSecurity"] == "No") else 0
     )
 
-    # ---- Build final feature dict ----
-    full_features = raw.copy()
+    # --- Build vector directly ---
+    vector = np.empty(len(feature_columns), dtype=np.float32)
 
-    full_features.update({
-        "charges_per_month": charges_per_month,
-        "tenure_bucket": tenure_bucket,
-        "clv_proxy": clv_proxy,
-        "avg_charge_per_tenure": avg_charge_per_tenure,
-        "num_services": num_services,
-        "service_density": service_density,
-        "is_fiber": is_fiber,
-        "contract_strength": contract_strength,
-        "high_monthly_charge": high_monthly_charge,
-        "is_electronic_check": is_electronic_check,
-        "tenure_contract_interaction": tenure_contract_interaction,
-        "high_charge_no_security": high_charge_no_security,
-    })
+    # Convert categorical list to set once (fast membership)
+    categorical_set = set(categorical_columns)
 
-    # ---- Ordered numpy vector ----
-    vector = []
+    for i, col in enumerate(feature_columns):
 
-    for col in feature_columns:
-        val = full_features[col]
+        if col == "charges_per_month":
+            val = charges_per_month
+        elif col == "tenure_bucket":
+            val = tenure_bucket
+        elif col == "clv_proxy":
+            val = clv_proxy
+        elif col == "avg_charge_per_tenure":
+            val = avg_charge_per_tenure
+        elif col == "num_services":
+            val = num_services
+        elif col == "service_density":
+            val = service_density
+        elif col == "is_fiber":
+            val = is_fiber
+        elif col == "contract_strength":
+            val = contract_strength
+        elif col == "high_monthly_charge":
+            val = high_monthly_charge
+        elif col == "is_electronic_check":
+            val = is_electronic_check
+        elif col == "tenure_contract_interaction":
+            val = tenure_contract_interaction
+        elif col == "high_charge_no_security":
+            val = high_charge_no_security
+        else:
+            val = raw[col]
 
-        if col in categorical_columns:
-            # ✅ SAFE lookup (prevents KeyError like 'gender')
+        # Categorical encoding
+        if col in categorical_set:
             val = category_maps.get(col, {}).get(str(val), 0)
 
-        vector.append(val)
+        vector[i] = val
 
-    return np.array(vector, dtype=np.float32).reshape(1, -1)
+    return vector.reshape(1, -1)
