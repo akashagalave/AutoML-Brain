@@ -7,3 +7,4 @@ pydantic
 prometheus-client==0.20.0
 redis
 orjson
+gunicorn

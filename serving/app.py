@@ -12,7 +12,9 @@ from .schema import PredictionRequest, PredictionResponse
 from .config import APP_NAME, MODEL_VERSION
 from src.common.feature_builder import build_feature_dataframe
 
+# ==============================
 # Optional Redis
+# ==============================
 REDIS_ENABLED = os.getenv("REDIS_ENABLED", "false").lower() == "true"
 redis_client = None
 
@@ -24,12 +26,17 @@ if REDIS_ENABLED:
         decode_responses=True
     )
 
+# ==============================
+# FastAPI App
+# ==============================
 app = FastAPI(
     title=APP_NAME,
     default_response_class=ORJSONResponse
 )
 
-# SLA-aware latency buckets (honest)
+# ==============================
+# Prometheus Metrics
+# ==============================
 LATENCY_BUCKETS = (
     0.05, 0.1, 0.2,
     0.3, 0.5,
@@ -45,19 +52,35 @@ request_latency = Histogram(
     buckets=LATENCY_BUCKETS
 )
 
-# Global model objects
+# ==============================
+# Global Model Assets
+# ==============================
 booster = None
 threshold = None
 feature_columns = None
 feature_stats = None
+categorical_columns = None
 
 
+# ==============================
+# Startup: preload model once
+# ==============================
 @app.on_event("startup")
 def preload():
-    global booster, threshold, feature_columns, feature_stats
-    booster, threshold, feature_columns, feature_stats = load_model_assets()
+    global booster, threshold, feature_columns, feature_stats, categorical_columns
+
+    (
+        booster,
+        threshold,
+        feature_columns,
+        feature_stats,
+        categorical_columns,
+    ) = load_model_assets()
 
 
+# ==============================
+# Metrics Middleware
+# ==============================
 @app.middleware("http")
 async def metrics_middleware(request, call_next):
     start = time.perf_counter()
@@ -67,29 +90,31 @@ async def metrics_middleware(request, call_next):
     return response
 
 
+# ==============================
+# Prediction Endpoint
+# ==============================
 @app.post("/predict", response_model=PredictionResponse)
 def predict(request: PredictionRequest):
 
     input_dict = request.features.model_dump()
 
-    # 🔥 Redis Cache Check
+    # ---------- Redis Cache ----------
     if REDIS_ENABLED and redis_client:
         cache_key = f"churn:{json.dumps(input_dict, sort_keys=True)}"
         cached = redis_client.get(cache_key)
         if cached:
             return PredictionResponse(**json.loads(cached))
 
-    # 1️⃣ Build Feature DataFrame
-    df = build_feature_dataframe(input_dict, feature_stats)
+    # ---------- Feature Engineering (CORRECTED) ----------
+    # IMPORTANT: positional args only
+    df = build_feature_dataframe(
+        input_dict,
+        feature_stats,
+        feature_columns,
+        categorical_columns,
+    )
 
-    # 2️⃣ Align exact feature order
-    df = df[feature_columns]
-
-    # 3️⃣ Restore categorical types
-    for col in df.select_dtypes(include="object").columns:
-        df[col] = df[col].astype("category")
-
-    # 4️⃣ LightGBM Prediction
+    # ---------- LightGBM Prediction ----------
     prob = float(booster.predict(df)[0])
     prediction = prob >= threshold
 
@@ -98,20 +123,22 @@ def predict(request: PredictionRequest):
         "churn_risk_score": int(prob * 100),
         "will_churn": bool(prediction),
         "model_version": MODEL_VERSION,
-        "top_reasons": None
+        "top_reasons": None,
     }
 
-    # 🔥 Store in Redis
     if REDIS_ENABLED and redis_client:
         redis_client.setex(
             cache_key,
-            300,  # 5 min TTL
+            300,
             json.dumps(response_data)
         )
 
     return PredictionResponse(**response_data)
 
 
+# ==============================
+# Health & Metrics
+# ==============================
 @app.get("/health")
 def health():
     return {
