@@ -73,94 +73,90 @@ stages:
       size: 207969
     - path: src/features/feature_engineering.py
       hash: md5
-      md5: f43000142cee7407ce698bb43496dd89
-      size: 2021
+      md5: 97fbcc71dc15268a7fc3221c6babb9ee
+      size: 1237
     - path: src/features/run_feature_engineering.py
       hash: md5
-      md5: 560cd77c529758406333892b00ac6817
-      size: 1170
+      md5: 45229eeb267b1a58ebe4a97d0fce0b29
+      size: 867
     outs:
     - path: data/processed/test_features.csv
       hash: md5
-      md5: a1ea0787464e48b7063176d52ee25a83
-      size: 487879
+      md5: ad44d52d21007ed44a3825906b3316f5
+      size: 206637
     - path: data/processed/train_features.csv
       hash: md5
-      md5: 6f0e7142a6a70d2575347bbe266b94af
-      size: 2269643
+      md5: 32998e8679f03635e06e52fb6c4c94cb
+      size: 963401
     - path: data/processed/validation_features.csv
       hash: md5
-      md5: f12015a2375cf70660326e403e103c80
-      size: 487541
-    - path: models/feature_artifacts/feature_transformer.pkl
-      hash: md5
-      md5: fee5d44ef22c9330aa87850da10d9aa5
-      size: 7648
+      md5: abeb22a34ae5325485b2d5a83588270c
+      size: 205233
   model_building:
     cmd: python src/model/model_building.py
     deps:
     - path: data/processed/train_features.csv
       hash: md5
-      md5: 6f0e7142a6a70d2575347bbe266b94af
-      size: 2269643
+      md5: 32998e8679f03635e06e52fb6c4c94cb
+      size: 963401
     - path: data/processed/validation_features.csv
       hash: md5
-      md5: f12015a2375cf70660326e403e103c80
-      size: 487541
+      md5: abeb22a34ae5325485b2d5a83588270c
+      size: 205233
     - path: src/model/model_building.py
       hash: md5
-      md5: 7b57e91104174365c74a3e680e7357f0
-      size: 4849
+      md5: cfb2f9df92df891abecac0a0e4703774
+      size: 6357
     outs:
     - path: models/model_artifacts
       hash: md5
-      md5: e0192e5f7c59d243101ba33def5b1d75.dir
-      size: 11388904
-      nfiles: 3
+      md5: 641a8c3b85e47985322e9746663a6ca7.dir
+      size: 623054
+      nfiles: 5
     - path: reports/shap/shap_global_importance.csv
       hash: md5
-      md5: 13a8dbb36570a485806e70a99fe7ea9b
-      size: 1532
+      md5: 0381b7869a0430fa6d2cd999bb058925
+      size: 1113
     - path: reports/shap/shap_summary.png
       hash: md5
-      md5: c3aade96c68415e06effbe37794eed16
-      size: 119401
-    - path: reports/shap/shap_summary_bar.png
-      hash: md5
-      md5: 9238593b808f091569e4a1c0098c4d31
-      size: 26049
+      md5: 3b09f0cbe57f8ead3366ee048d3f86cc
+      size: 97528
   model_evaluation:
     cmd: python src/model/model_evaluation.py
     deps:
     - path: data/processed/test_features.csv
       hash: md5
-      md5: a1ea0787464e48b7063176d52ee25a83
-      size: 487879
+      md5: ad44d52d21007ed44a3825906b3316f5
+      size: 206637
     - path: models/model_artifacts
       hash: md5
-      md5: e0192e5f7c59d243101ba33def5b1d75.dir
-      size: 11388904
-      nfiles: 3
+      md5: 641a8c3b85e47985322e9746663a6ca7.dir
+      size: 623054
+      nfiles: 5
     - path: src/model/model_evaluation.py
       hash: md5
-      md5: 74fd27bb0c73fcad0822fb49585a21ca
-      size: 1935
+      md5: 2e4743c7ab108264f5b6888f657d9992
+      size: 3749
     outs:
     - path: reports/evaluation/metrics.json
       hash: md5
-      md5: 66e26731d11a1aa93c114ac85bbd272a
-      size: 147
+      md5: 383544b62bb21eb6d7a33b2c51572fef
+      size: 107
+    - path: run_information.json
+      hash: md5
+      md5: 0970efd552c9676df3b021884bbf3fea
+      size: 358
   drift_detection:
     cmd: python src/monitoring/drift_detection.py
     deps:
     - path: data/processed/test_features.csv
       hash: md5
-      md5: a1ea0787464e48b7063176d52ee25a83
-      size: 487879
+      md5: ad44d52d21007ed44a3825906b3316f5
+      size: 206637
     - path: data/processed/train_features.csv
       hash: md5
-      md5: 6f0e7142a6a70d2575347bbe266b94af
-      size: 2269643
+      md5: 32998e8679f03635e06e52fb6c4c94cb
+      size: 963401
     - path: src/monitoring/drift_detection.py
       hash: md5
       md5: a82b6f02a3d8404cd0e0176e4dc7378a
@@ -170,3 +166,14 @@ stages:
       hash: md5
       md5: 5b65fb1836b4f9139594747576815818
       size: 707
+  model_registry:
+    cmd: python src/model/model_registry.py
+    deps:
+    - path: run_information.json
+      hash: md5
+      md5: 0970efd552c9676df3b021884bbf3fea
+      size: 358
+    - path: src/model/model_registry.py
+      hash: md5
+      md5: 28334990c07da69fe1cf42e91a9d47a1
+      size: 1168

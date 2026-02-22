@@ -1,10 +1,5 @@
 import pandas as pd
-import joblib
 import logging
-from pathlib import Path
-from sklearn.preprocessing import OneHotEncoder, StandardScaler
-from sklearn.compose import ColumnTransformer
-
 
 logger = logging.getLogger("feature_engineering")
 logger.setLevel(logging.INFO)
@@ -37,35 +32,17 @@ CATEGORICAL_COLS = [
 TARGET_COL = "Churn"
 
 
-def build_transformer():
+def build_features(df):
 
-    transformer = ColumnTransformer(
-        transformers=[
-            ("num", StandardScaler(), NUMERIC_COLS),
-            ("cat", OneHotEncoder(handle_unknown="ignore", sparse_output=False), CATEGORICAL_COLS),
-        ]
-    )
-
-    return transformer
-
-
-def build_features(df, mode="train", transformer=None):
+    # Convert categorical columns to category dtype (CRITICAL)
+    for col in CATEGORICAL_COLS:
+        df[col] = df[col].astype("category")
 
     X = df.drop(columns=[TARGET_COL])
     y = df[TARGET_COL]
 
-    if mode == "train":
-        transformer = build_transformer()
-        X_transformed = transformer.fit_transform(X)
+    X[TARGET_COL] = y
 
-        Path("models/feature_artifacts").mkdir(parents=True, exist_ok=True)
-        joblib.dump(transformer, "models/feature_artifacts/feature_transformer.pkl")
+    logger.info("Native LightGBM features prepared (no sklearn transformer).")
 
-    else:
-        transformer = joblib.load("models/feature_artifacts/feature_transformer.pkl")
-        X_transformed = transformer.transform(X)
-
-    X_transformed = pd.DataFrame(X_transformed)
-    X_transformed[TARGET_COL] = y.values
-
-    return X_transformed, transformer
+    return X

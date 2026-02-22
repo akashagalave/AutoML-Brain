@@ -1,80 +1,136 @@
 import json
 import logging
-import joblib
+import numpy as np
 import pandas as pd
+import lightgbm as lgb
 import mlflow
 import dagshub
-
 from pathlib import Path
-from sklearn.metrics import (
-    roc_auc_score,
-    average_precision_score,
-    accuracy_score,
-    f1_score
-)
+from sklearn.metrics import roc_auc_score, f1_score, accuracy_score
 
-# Initialize DagsHub MLflow tracking
+
+# =====================================================
+# INIT MLFLOW
+# =====================================================
+
 dagshub.init(
-    repo_owner='akashagalaveaaa1',
-    repo_name='AutoML-Brain',
+    repo_owner="akashagalaveaaa1",
+    repo_name="AutoML-Brain",
     mlflow=True
 )
 
+logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("model_evaluation")
-logger.setLevel(logging.INFO)
-
-if not logger.handlers:
-    logger.addHandler(logging.StreamHandler())
 
 
-DATA_PATH = "data/processed/test_features.csv"
+# =====================================================
+# PATHS
+# =====================================================
+
+TEST_PATH = "data/processed/test_features.csv"
 MODEL_DIR = Path("models/model_artifacts")
 REPORT_DIR = Path("reports/evaluation")
 REPORT_DIR.mkdir(parents=True, exist_ok=True)
 
 
-model = joblib.load(MODEL_DIR / "model.pkl")
-feature_columns = json.load(open(MODEL_DIR / "feature_columns.json"))
-threshold = json.load(open(MODEL_DIR / "best_threshold.json"))["threshold"]
+# =====================================================
+# LOAD TEST DATA
+# =====================================================
 
-df = pd.read_csv(DATA_PATH)
+logger.info("Loading test dataset...")
+df = pd.read_csv(TEST_PATH)
 
 TARGET = "Churn"
+
 X = df.drop(columns=[TARGET])
 y = df[TARGET]
 
+
+# =====================================================
+# LOAD FEATURE SCHEMA
+# =====================================================
+
+with open(MODEL_DIR / "feature_columns.json", "r") as f:
+    feature_columns = json.load(f)
+
 X = X[feature_columns]
 
-y_prob = model.predict_proba(X)[:, 1]
-y_pred = (y_prob >= threshold).astype(int)
 
-metrics = {
-    "roc_auc": float(roc_auc_score(y, y_prob)),
-    "pr_auc": float(average_precision_score(y, y_prob)),
-    "accuracy": float(accuracy_score(y, y_pred)),
-    "f1_score": float(f1_score(y, y_pred))
-}
+# =====================================================
+# FIX CATEGORICAL TYPES
+# =====================================================
 
-logger.info(metrics)
+categorical_cols = X.select_dtypes(include="object").columns.tolist()
 
-with open(REPORT_DIR / "metrics.json", "w") as f:
-    json.dump(metrics, f, indent=4)
+for col in categorical_cols:
+    X[col] = X[col].astype("category")
+
+logger.info(f"Categorical columns restored: {categorical_cols}")
 
 
-mlflow.set_experiment("automl_brain_evaluation")
+# =====================================================
+# LOAD MODEL
+# =====================================================
 
-with mlflow.start_run(run_name="RandomForest_Optuna_Churn"):
+model_path = MODEL_DIR / "model.txt"
+logger.info("Loading LightGBM native booster...")
+model = lgb.Booster(model_file=str(model_path))
 
+
+# =====================================================
+# EVALUATION + MLFLOW LOGGING
+# =====================================================
+
+with mlflow.start_run() as run:
+
+    logger.info("Running evaluation predictions...")
+    y_prob = model.predict(X)
+
+    with open(MODEL_DIR / "best_threshold.json", "r") as f:
+        threshold = json.load(f)["threshold"]
+
+    y_pred = (y_prob >= threshold).astype(int)
+
+    roc_auc = roc_auc_score(y, y_prob)
+    f1 = f1_score(y, y_pred)
+    accuracy = accuracy_score(y, y_pred)
+
+    metrics = {
+        "roc_auc": float(roc_auc),
+        "f1": float(f1),
+        "accuracy": float(accuracy),
+    }
+
+    logger.info(f"ROC-AUC: {roc_auc:.4f}")
+    logger.info(f"F1: {f1:.4f}")
+    logger.info(f"Accuracy: {accuracy:.4f}")
+
+    # Log metrics
     mlflow.log_metrics(metrics)
-    mlflow.log_param("best_threshold", threshold)
 
-    signature = mlflow.models.infer_signature(X, y_prob)
+    # 🔥 IMPORTANT: log model.txt as artifact manually
+    mlflow.log_artifact(str(model_path), artifact_path="model_artifacts")
 
-    mlflow.sklearn.log_model(
-        model,
-        name="churn_model",
-        signature=signature,
-        input_example=X.head(5)
-    )
+    run_id = run.info.run_id
 
-logger.info("Model evaluation completed successfully.")
+    # Correct URI for artifact-based model
+    model_uri = f"runs:/{run_id}/model_artifacts/model.txt"
+
+    # Save metrics report
+    with open(REPORT_DIR / "metrics.json", "w") as f:
+        json.dump(metrics, f, indent=4)
+
+    # Create run_information.json
+    run_information = {
+        "run_id": run_id,
+        "model_uri": model_uri,
+        "model_type": "lightgbm_native",
+        "threshold": float(threshold),
+        "metrics": metrics
+    }
+
+    with open("run_information.json", "w") as f:
+        json.dump(run_information, f, indent=4)
+
+    logger.info("run_information.json created successfully.")
+    logger.info("Evaluation + MLflow logging completed successfully.")

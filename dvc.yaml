@@ -36,7 +36,6 @@ stages:
       - data/processed/train_features.csv
       - data/processed/validation_features.csv
       - data/processed/test_features.csv
-      - models/feature_artifacts/feature_transformer.pkl
 
 
   model_building:
@@ -46,10 +45,11 @@ stages:
       - data/processed/train_features.csv
       - data/processed/validation_features.csv
     outs:
-      - models/model_artifacts
+      - models/model_artifacts:
+          cache: false
       - reports/shap/shap_global_importance.csv
       - reports/shap/shap_summary.png
-      - reports/shap/shap_summary_bar.png
+      #- reports/shap/shap_summary_bar.png
 
 
   model_evaluation:
@@ -60,6 +60,14 @@ stages:
       - models/model_artifacts
     outs:
       - reports/evaluation/metrics.json
+      - run_information.json
+
+
+  model_registry:
+    cmd: python src/model/model_registry.py
+    deps:
+      - src/model/model_registry.py
+      - run_information.json
 
 
   drift_detection:

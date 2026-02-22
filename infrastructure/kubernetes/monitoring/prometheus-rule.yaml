@@ -1,0 +1,44 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: inference-sla-rules
+  namespace: monitoring
+  labels:
+    release: kube-prometheus-stack
+spec:
+  groups:
+  - name: inference-sla
+    rules:
+
+    - alert: HighP95Latency
+      expr: |
+        histogram_quantile(
+          0.95,
+          sum(rate(churn_request_latency_seconds_bucket[5m])) by (le)
+        ) > 0.4
+      for: 5m
+      labels:
+        severity: warning
+      annotations:
+        summary: "High P95 Latency"
+        description: "P95 latency exceeded 400ms for 5 minutes."
+
+    - alert: HighErrorRate
+      expr: |
+        rate(http_requests_total{status=~"5.."}[5m]) > 0.05
+      for: 5m
+      labels:
+        severity: critical
+      annotations:
+        summary: "High Error Rate"
+        description: "More than 5% 5xx errors in last 5 minutes."
+
+    - alert: InferencePodDown
+      expr: |
+        kube_deployment_status_replicas_available{deployment="inference-deployment", namespace="automl-brain"} < 1
+      for: 2m
+      labels:
+        severity: critical
+      annotations:
+        summary: "Inference Pod Down"
+        description: "No inference pods are available."

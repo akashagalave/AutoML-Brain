@@ -1,0 +1,42 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: inference-deployment
+  namespace: automl-brain
+  labels:
+    app: churn-inference
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: churn-inference
+  template:
+    metadata:
+      labels:
+        app: churn-inference
+    spec:
+      containers:
+      - name: churn-inference
+        image: 199964507152.dkr.ecr.us-east-1.amazonaws.com/automl-brain-inference:latest
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 8000
+        resources:
+          requests:
+            cpu: "250m"
+            memory: "512Mi"
+          limits:
+            cpu: "500m"
+            memory: "1Gi"
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8000
+          initialDelaySeconds: 10
+          periodSeconds: 5
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8000
+          initialDelaySeconds: 20
+          periodSeconds: 10

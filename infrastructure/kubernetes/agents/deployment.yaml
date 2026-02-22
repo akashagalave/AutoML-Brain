@@ -1,0 +1,27 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: governance-agent
+  namespace: automl-brain
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: governance-agent
+  template:
+    metadata:
+      labels:
+        app: governance-agent
+    spec:
+      serviceAccountName: governance-agent-sa   # 🔥 THIS IS CRITICAL
+      containers:
+        - name: governance-agent
+          image: 199964507152.dkr.ecr.us-east-1.amazonaws.com/automl-brain-governance-agent:latest
+          imagePullPolicy: Always
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              cpu: "300m"
+              memory: "256Mi"
