@@ -1,23 +1,40 @@
 import time
+import os
+import json
 from fastapi import FastAPI
 from starlette.responses import Response
+from fastapi.responses import ORJSONResponse
 from prometheus_client import Histogram, generate_latest
 from prometheus_client import CONTENT_TYPE_LATEST
 
 from .model_loader import load_model_assets
 from .schema import PredictionRequest, PredictionResponse
 from .config import APP_NAME, MODEL_VERSION
-#from .cache import get_cached_prediction, set_cached_prediction
 from src.common.feature_builder import build_feature_dataframe
 
+# Optional Redis
+REDIS_ENABLED = os.getenv("REDIS_ENABLED", "false").lower() == "true"
+redis_client = None
 
-app = FastAPI(title=APP_NAME)
+if REDIS_ENABLED:
+    import redis
+    redis_client = redis.Redis(
+        host=os.getenv("REDIS_HOST", "redis"),
+        port=int(os.getenv("REDIS_PORT", 6379)),
+        decode_responses=True
+    )
 
-# SLA-aware latency buckets
+app = FastAPI(
+    title=APP_NAME,
+    default_response_class=ORJSONResponse
+)
+
+# SLA-aware latency buckets (honest)
 LATENCY_BUCKETS = (
-    0.01, 0.02, 0.05,
-    0.1, 0.2, 0.3,
-    0.5, 1.0,
+    0.05, 0.1, 0.2,
+    0.3, 0.5,
+    1.0, 2.0, 3.0,
+    5.0, 8.0, 10.0,
     float("inf"),
 )
 
@@ -28,10 +45,17 @@ request_latency = Histogram(
     buckets=LATENCY_BUCKETS
 )
 
+# Global model objects
+booster = None
+threshold = None
+feature_columns = None
+feature_stats = None
+
 
 @app.on_event("startup")
 def preload():
-    load_model_assets()
+    global booster, threshold, feature_columns, feature_stats
+    booster, threshold, feature_columns, feature_stats = load_model_assets()
 
 
 @app.middleware("http")
@@ -48,24 +72,24 @@ def predict(request: PredictionRequest):
 
     input_dict = request.features.model_dump()
 
-    # 1️⃣ Cache Check
-    # cached = get_cached_prediction(input_dict)
-    # if cached:
-    #     return PredictionResponse(**cached)
+    # 🔥 Redis Cache Check
+    if REDIS_ENABLED and redis_client:
+        cache_key = f"churn:{json.dumps(input_dict, sort_keys=True)}"
+        cached = redis_client.get(cache_key)
+        if cached:
+            return PredictionResponse(**json.loads(cached))
 
-    booster, threshold, feature_columns, feature_stats = load_model_assets()
-
-    # 2️⃣ Build Feature DataFrame
+    # 1️⃣ Build Feature DataFrame
     df = build_feature_dataframe(input_dict, feature_stats)
 
-    # 3️⃣ Align exact feature order as training
+    # 2️⃣ Align exact feature order
     df = df[feature_columns]
 
-    # 4️⃣ Restore categorical types
+    # 3️⃣ Restore categorical types
     for col in df.select_dtypes(include="object").columns:
         df[col] = df[col].astype("category")
 
-    # 5️⃣ Native LightGBM Prediction
+    # 4️⃣ LightGBM Prediction
     prob = float(booster.predict(df)[0])
     prediction = prob >= threshold
 
@@ -77,7 +101,13 @@ def predict(request: PredictionRequest):
         "top_reasons": None
     }
 
-    #set_cached_prediction(input_dict, response_data)
+    # 🔥 Store in Redis
+    if REDIS_ENABLED and redis_client:
+        redis_client.setex(
+            cache_key,
+            300,  # 5 min TTL
+            json.dumps(response_data)
+        )
 
     return PredictionResponse(**response_data)
 

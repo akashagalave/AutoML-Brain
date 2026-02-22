@@ -15,4 +15,4 @@ confluent-kafka
 seaborn
 awscli
 shap
-    
+orjson

@@ -47,4 +47,4 @@ EXPOSE 8000
 # ==============================
 # Production Command
 # ==============================
-CMD ["uvicorn", "serving.app:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "4"]
+CMD ["uvicorn", "serving.app:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "3"]

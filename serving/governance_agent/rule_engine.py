@@ -24,32 +24,32 @@ class GovernanceState:
         if p95 is None:
             return None
 
-        # High error rate always critical
+        # Critical error spike
         if error_rate is not None and error_rate > ERROR_RATE_THRESHOLD:
             if self.can_act():
                 self.last_action_time = time.time()
-                return "escalate"
+                return "retrain"
 
-        #High latency case
+        # High latency
         if p95 > LATENCY_THRESHOLD:
             self.breach_count += 1
             self.recovery_count = 0
 
             if self.breach_count >= BREACH_CYCLES and self.can_act():
 
-                # Infra saturation case
+                # Infra saturated → scale
                 if cpu is not None and cpu > CPU_HIGH_THRESHOLD:
                     self.last_action_time = time.time()
                     self.breach_count = 0
                     return "scale_up"
 
-                # Model inefficiency case
+                # Model inefficient → retrain
                 else:
                     self.last_action_time = time.time()
                     self.breach_count = 0
-                    return "escalate"
+                    return "retrain"
 
-        # Recovery case
+        # Recovery
         elif p95 < LOW_LATENCY_THRESHOLD:
             self.recovery_count += 1
             self.breach_count = 0

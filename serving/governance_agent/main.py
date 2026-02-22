@@ -3,7 +3,11 @@ import logging
 
 from prometheus_client import query_prometheus
 from rule_engine import GovernanceState
-from k8s_controller import scale_deployment, get_current_replicas
+from k8s_controller import (
+    scale_deployment,
+    get_current_replicas,
+    trigger_retraining_job
+)
 from metrics_queries import P95_QUERY, CPU_QUERY, ERROR_RATE_QUERY
 from config import (
     POLL_INTERVAL,
@@ -19,8 +23,9 @@ logging.basicConfig(
     format="%(asctime)s | %(levelname)s | %(message)s"
 )
 
+
 def main():
-    logging.info("Governance Agent v3 (Multi-Signal) started.")
+    logging.info("Governance Agent v5 (Safe Autonomous Mode) started.")
     state = GovernanceState()
 
     while True:
@@ -59,8 +64,9 @@ def main():
                         new_replicas
                     )
 
-                elif action == "escalate":
-                    logging.error("Escalation triggered: SLA violation without infra saturation.")
+                elif action == "retrain":
+                    logging.error("SLA violation detected — evaluating retrain policy.")
+                    trigger_retraining_job(TARGET_NAMESPACE)
 
         except Exception as e:
             logging.error(f"Error in governance loop: {e}")

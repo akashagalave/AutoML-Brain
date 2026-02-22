@@ -6,7 +6,7 @@ metadata:
   labels:
     app: churn-inference
 spec:
-  replicas: 2
+  replicas: 4
   selector:
     matchLabels:
       app: churn-inference
@@ -21,22 +21,29 @@ spec:
         imagePullPolicy: Always
         ports:
         - containerPort: 8000
+
         resources:
           requests:
-            cpu: "250m"
+            cpu: "500m"
             memory: "512Mi"
           limits:
-            cpu: "500m"
+            cpu: "1500m"
             memory: "1Gi"
+
         readinessProbe:
           httpGet:
             path: /health
             port: 8000
           initialDelaySeconds: 10
           periodSeconds: 5
+          timeoutSeconds: 2
+          failureThreshold: 3
+
         livenessProbe:
           httpGet:
             path: /health
             port: 8000
           initialDelaySeconds: 20
           periodSeconds: 10
+          timeoutSeconds: 2
+          failureThreshold: 3
