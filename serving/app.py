@@ -1,6 +1,7 @@
 import time
 import os
 import json
+import numpy as np
 from fastapi import FastAPI
 from starlette.responses import Response
 from fastapi.responses import ORJSONResponse
@@ -62,15 +63,13 @@ feature_stats = None
 categorical_columns = None
 categorical_indices = None
 category_maps = None
+explainer = None
 
 
-# ==============================
-# Startup: preload model once
-# ==============================
 @app.on_event("startup")
 def preload():
     global booster, threshold, feature_columns, feature_stats, \
-           categorical_columns, categorical_indices, category_maps
+           categorical_columns, categorical_indices, category_maps, explainer
 
     (
         booster,
@@ -80,12 +79,10 @@ def preload():
         categorical_columns,
         categorical_indices,
         category_maps,
+        explainer,
     ) = load_model_assets()
 
 
-# ==============================
-# Metrics Middleware
-# ==============================
 @app.middleware("http")
 async def metrics_middleware(request, call_next):
     start = time.perf_counter()
@@ -96,21 +93,13 @@ async def metrics_middleware(request, call_next):
 
 
 # ==============================
-# Prediction Endpoint
+# FAST PREDICT
 # ==============================
 @app.post("/predict", response_model=PredictionResponse)
 def predict(request: PredictionRequest):
 
     input_dict = request.features.model_dump()
 
-    # ---------- Redis Cache ----------
-    if REDIS_ENABLED and redis_client:
-        cache_key = f"churn:{json.dumps(input_dict, sort_keys=True)}"
-        cached = redis_client.get(cache_key)
-        if cached:
-            return PredictionResponse(**json.loads(cached))
-
-    # ---------- Numpy Feature Vector ----------
     vector = build_feature_vector(
         input_dict,
         feature_stats,
@@ -119,7 +108,6 @@ def predict(request: PredictionRequest):
         category_maps,
     )
 
-    # ---------- LightGBM Prediction ----------
     prob = float(
         booster.predict(
             vector,
@@ -129,22 +117,70 @@ def predict(request: PredictionRequest):
 
     prediction = prob >= threshold
 
-    response_data = {
+    return PredictionResponse(
+        churn_probability=prob,
+        churn_risk_score=int(prob * 100),
+        will_churn=bool(prediction),
+        model_version=MODEL_VERSION,
+        top_reasons=None,
+    )
+
+
+# ==============================
+# EXPLAIN ENDPOINT
+# ==============================
+@app.post("/predict/explain")
+def predict_with_explain(request: PredictionRequest):
+
+    input_dict = request.features.model_dump()
+
+    vector = build_feature_vector(
+        input_dict,
+        feature_stats,
+        feature_columns,
+        categorical_columns,
+        category_maps,
+    )
+
+    prob = float(
+        booster.predict(
+            vector,
+            categorical_feature=categorical_indices
+        )[0]
+    )
+
+    # SHAP values
+    shap_values = explainer.shap_values(vector)
+
+    if isinstance(shap_values, list):
+        shap_values = shap_values[1]
+
+    shap_values = shap_values[0]
+
+    # Top 3 impactful features
+    abs_vals = np.abs(shap_values)
+    top_indices = np.argsort(abs_vals)[-3:][::-1]
+
+    explanations = []
+
+    for idx in top_indices:
+        feature = feature_columns[idx]
+        impact = shap_values[idx]
+
+        direction = "increased" if impact > 0 else "decreased"
+
+        explanations.append({
+            "feature": feature,
+            "impact_value": float(impact),
+            "explanation": f"{feature} {direction} the churn risk."
+        })
+
+    return {
         "churn_probability": prob,
-        "churn_risk_score": int(prob * 100),
-        "will_churn": bool(prediction),
+        "will_churn": prob >= threshold,
         "model_version": MODEL_VERSION,
-        "top_reasons": None,
+        "top_reasons": explanations
     }
-
-    if REDIS_ENABLED and redis_client:
-        redis_client.setex(
-            cache_key,
-            300,
-            json.dumps(response_data)
-        )
-
-    return PredictionResponse(**response_data)
 
 
 # ==============================

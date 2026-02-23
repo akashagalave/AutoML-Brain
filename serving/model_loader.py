@@ -2,6 +2,7 @@ import json
 import os
 from pathlib import Path
 import lightgbm as lgb
+import shap
 
 _booster = None
 _threshold = None
@@ -10,10 +11,11 @@ _feature_stats = None
 _categorical_columns = None
 _categorical_indices = None
 _category_maps = None
+_explainer = None
 
 
 def load_model_assets():
-    global _booster, _threshold, _feature_columns, _feature_stats, _categorical_columns, _categorical_indices, _category_maps
+    global _booster, _threshold, _feature_columns, _feature_stats, _categorical_columns, _categorical_indices, _category_maps, _explainer
 
     if _booster is not None:
         return (
@@ -24,6 +26,7 @@ def load_model_assets():
             _categorical_columns,
             _categorical_indices,
             _category_maps,
+            _explainer,
         )
 
     os.environ["OMP_NUM_THREADS"] = "1"
@@ -38,6 +41,8 @@ def load_model_assets():
         model_file=str(model_dir / "model.txt")
     )
 
+    _explainer = shap.TreeExplainer(_booster)
+
     with open(model_dir / "best_threshold.json") as f:
         _threshold = json.load(f)["threshold"]
 
@@ -50,13 +55,11 @@ def load_model_assets():
     with open(model_dir / "feature_stats.json") as f:
         _feature_stats = json.load(f)
 
-    # Build categorical index lookup
     _categorical_indices = [
         _feature_columns.index(col)
         for col in _categorical_columns
     ]
 
-    # Extract category maps from trained model
     model_info = _booster.dump_model()
     _category_maps = {}
 
@@ -73,4 +76,5 @@ def load_model_assets():
         _categorical_columns,
         _categorical_indices,
         _category_maps,
+        _explainer,
     )
