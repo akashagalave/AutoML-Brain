@@ -1,20 +1,47 @@
 import os
 import json
+import csv
 import requests
 from openai import OpenAI
 from prompt_builder import build_prompt
+from shap_explanations import SHAP_EXPLANATIONS
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.lib.units import inch
 
 REPORT_DIR = "/app/reports/governance"
+SHAP_CSV = "/app/reports/shap/shap_global_importance.csv"
 PROMETHEUS_URL = "http://kube-prometheus-stack-prometheus.monitoring.svc.cluster.local:9090"
 
 
 def load_json(path):
     with open(path) as f:
         return json.load(f)
+
+
+def extract_top_shap_reasons(csv_path, top_k=5):
+    with open(csv_path) as f:
+        reader = csv.DictReader(f)
+        rows = sorted(
+            reader,
+            key=lambda x: float(x["mean_abs_shap"]),
+            reverse=True,
+        )[:top_k]
+
+    reasons = []
+    for row in rows:
+        feature = row["feature"]
+        explanation = SHAP_EXPLANATIONS.get(
+            feature,
+            "This feature has a statistically significant impact on churn."
+        )
+        reasons.append({
+            "Driver": feature,
+            "Explanation": explanation
+        })
+
+    return reasons
 
 
 def query_p95(track):
@@ -31,14 +58,14 @@ def query_p95(track):
     )
     """
 
-    response = requests.get(
+    r = requests.get(
         f"{PROMETHEUS_URL}/api/v1/query",
         params={"query": query},
         timeout=10,
     )
 
-    data = response.json()
-    if data.get("status") != "success" or not data["data"]["result"]:
+    data = r.json()
+    if data["status"] != "success" or not data["data"]["result"]:
         return None
 
     return float(data["data"]["result"][0]["value"][1])
@@ -47,72 +74,56 @@ def query_p95(track):
 def generate_pdf(report):
     os.makedirs(REPORT_DIR, exist_ok=True)
 
-    file_path = f"{REPORT_DIR}/deployment_report.pdf"
-    doc = SimpleDocTemplate(file_path, pagesize=A4)
+    doc = SimpleDocTemplate(
+        f"{REPORT_DIR}/deployment_report.pdf", pagesize=A4
+    )
+
     styles = getSampleStyleSheet()
     elements = []
 
-    title = Paragraph("AutoML Brain – Deployment Governance Report", styles["Title"])
-    elements.append(title)
+    elements.append(Paragraph("AutoML Brain – Deployment Governance Report", styles["Title"]))
     elements.append(Spacer(1, 0.4 * inch))
 
-    def section(title_text):
-        elements.append(Paragraph(f"<b>{title_text}</b>", styles["Heading2"]))
-        elements.append(Spacer(1, 0.2 * inch))
+    def section(title):
+        elements.append(Spacer(1, 0.3 * inch))
+        elements.append(Paragraph(f"<b>{title}</b>", styles["Heading2"]))
 
-    def bullet(text):
-        elements.append(Paragraph(f"- {text}", styles["Normal"]))
-
-    # 1️⃣ Retraining Reason
     section("Retraining Reason")
-    bullet(report["Retraining Reason"])
+    elements.append(Paragraph(report["Retraining Reason"], styles["Normal"]))
 
-    # 2️⃣ Deployment Safety Summary
     section("Deployment Safety Summary")
-    safety = report["Deployment Safety Summary"]
+    elements.append(Paragraph(str(report["Deployment Safety Summary"]), styles["Normal"]))
 
-    bullet(f"Model Version: {safety['model_version']}")
-    metrics = safety["evaluation_metrics"]
-    bullet(f"ROC-AUC: {metrics['ROC_AUC']:.3f}")
-    bullet(f"F1 Score: {metrics['F1_Score']:.3f}")
-    bullet(f"Accuracy: {metrics['Accuracy']:.3f}")
-
-    canary = safety["canary_evaluation"]
-    bullet(f"Canary Decision: {canary['decision']}")
-
-    # 3️⃣ Risk Assessment
     section("Risk Assessment")
-    risk = report["Risk Assessment"]
+    elements.append(Paragraph(str(report["Risk Assessment"]), styles["Normal"]))
 
-    bullet(f"Data Drift Level: {risk['data_drift']}")
-    bullet(f"Model Recommendation: {risk['model_performance']['recommendation']}")
-    bullet(f"Canary Status: {risk['canary_release']}")
+    section("Top Reasons for Customer Churn")
+    for r in report["Top Churn Drivers"]:
+        elements.append(
+            Paragraph(f"- <b>{r['Driver']}:</b> {r['Explanation']}", styles["Normal"])
+        )
 
-    # 4️⃣ Executive Summary
     section("Executive Summary")
-    exec_sum = report["Executive Summary"]
-
-    bullet(exec_sum["overall_status"])
-    elements.append(Spacer(1, 0.1 * inch))
-    bullet("Next Steps:")
-    for step in exec_sum["next_steps"]:
-        bullet(f"• {step}")
+    elements.append(Paragraph(report["Executive Summary"], styles["Normal"]))
 
     doc.build(elements)
 
 
 def main():
+    os.makedirs(REPORT_DIR, exist_ok=True)
+
     metrics = load_json("/app/reports/evaluation/metrics.json")
     drift = load_json("/app/reports/drift/psi_report.json")
 
     stable_p95 = query_p95("stable")
     canary_p95 = query_p95("canary")
 
-    decision = (
-        "PROMOTED"
-        if stable_p95 and canary_p95 and canary_p95 <= stable_p95
-        else "REJECTED"
-    )
+    if stable_p95 is None or canary_p95 is None:
+        decision = "DEFERRED (NO TRAFFIC)"
+    elif canary_p95 <= stable_p95:
+        decision = "PROMOTED"
+    else:
+        decision = "REJECTED"
 
     canary_data = {
         "stable_p95": stable_p95,
@@ -120,7 +131,15 @@ def main():
         "decision": decision,
     }
 
-    prompt = build_prompt(metrics, drift, canary_data, "Latest Production")
+    shap_reasons = extract_top_shap_reasons(SHAP_CSV)
+
+    prompt = build_prompt(
+        metrics,
+        drift,
+        canary_data,
+        "Latest Production",
+        shap_reasons,
+    )
 
     client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
@@ -128,28 +147,19 @@ def main():
         model="gpt-4o-mini",
         response_format={"type": "json_object"},
         messages=[
-            {
-                "role": "system",
-                "content": "You are a professional ML governance analyst. Respond ONLY in valid JSON.",
-            },
+            {"role": "system", "content": "Respond ONLY in valid JSON."},
             {"role": "user", "content": prompt},
         ],
     )
 
-    raw = response.choices[0].message.content
-    if not raw:
-        raise RuntimeError("LLM returned empty response")
-
-    report_json = json.loads(raw)
-
-    os.makedirs(REPORT_DIR, exist_ok=True)
+    report = json.loads(response.choices[0].message.content)
 
     with open(f"{REPORT_DIR}/deployment_report.json", "w") as f:
-        json.dump(report_json, f, indent=4)
+        json.dump(report, f, indent=4)
 
-    generate_pdf(report_json)
+    generate_pdf(report)
 
-    print("✅ Deployment report generated successfully")
+    print("✅ Governance report generated successfully")
 
 
 if __name__ == "__main__":

@@ -1,6 +1,11 @@
-def build_prompt(metrics, drift, canary_data, model_version):
+def build_prompt(metrics, drift, canary_data, model_version, shap_reasons):
     return f"""
-You are an AI ML Governance Analyst.
+You are an ML Governance Analyst writing for business stakeholders.
+
+IMPORTANT RULES:
+- If latency metrics are missing (None), DO NOT reject the deployment.
+- In absence of traffic, mark the decision as DEFERRED due to no traffic.
+- Do NOT hallucinate latency failures.
 
 Model Version: {model_version}
 
@@ -9,17 +14,23 @@ ROC-AUC: {metrics.get("roc_auc")}
 F1 Score: {metrics.get("f1")}
 Accuracy: {metrics.get("accuracy")}
 
-Drift Metrics (PSI):
+Data Drift (PSI):
 {drift}
 
-Canary Evaluation:
-Stable P95 Latency: {canary_data.get("stable_p95")}
-Canary P95 Latency: {canary_data.get("canary_p95")}
+Latency Evaluation:
+Stable P95: {canary_data.get("stable_p95")}
+Canary P95: {canary_data.get("canary_p95")}
 Decision: {canary_data.get("decision")}
 
-Generate a JSON object with:
-- retraining_reason
-- deployment_safety_summary
-- risk_assessment
-- executive_summary
+Top Churn Drivers (business explanations):
+{shap_reasons}
+
+Generate STRICT JSON with keys:
+- Retraining Reason
+- Deployment Safety Summary
+- Risk Assessment
+- Top Churn Drivers
+- Executive Summary
+
+Respond ONLY in valid JSON.
 """
