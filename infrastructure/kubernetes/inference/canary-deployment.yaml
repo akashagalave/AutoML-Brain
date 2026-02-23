@@ -1,0 +1,36 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: inference-canary
+  namespace: automl-brain
+  labels:
+    app: churn-inference
+    track: canary
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: churn-inference
+      track: canary
+  template:
+    metadata:
+      labels:
+        app: churn-inference
+        track: canary
+    spec:
+      containers:
+      - name: churn-inference
+        image: 199964507152.dkr.ecr.us-east-1.amazonaws.com/automl-brain-inference:latest
+        imagePullPolicy: Always
+        env:
+        - name: MODEL_STAGE
+          value: "Staging"
+        ports:
+        - containerPort: 8000
+        resources:
+          requests:
+            cpu: "300m"
+            memory: "256Mi"
+          limits:
+            cpu: "1000m"
+            memory: "512Mi"

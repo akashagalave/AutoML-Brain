@@ -5,8 +5,14 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-RUN pip install dvc[s3] mlflow dagshub
+RUN pip install dvc[s3] mlflow dagshub kubernetes
 
 COPY . .
 
-CMD ["bash", "-c", "dvc pull && dvc repro && dvc push"]
+# Run DVC pipeline + registry + trigger deployment job
+CMD ["bash", "-c", "\
+    dvc pull && \
+    dvc repro && \
+    dvc push && \
+    python serving/training/trigger_deployment.py \
+"]

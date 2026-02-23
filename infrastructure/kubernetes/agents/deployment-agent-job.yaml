@@ -1,0 +1,15 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: deployment-agent
+  namespace: automl-brain
+spec:
+  backoffLimit: 1
+  template:
+    spec:
+      serviceAccountName: deployment-agent-sa
+      restartPolicy: Never
+      containers:
+      - name: deployment-agent
+        image: 199964507152.dkr.ecr.us-east-1.amazonaws.com/automl-brain-deployment-agent:latest
+        imagePullPolicy: Always

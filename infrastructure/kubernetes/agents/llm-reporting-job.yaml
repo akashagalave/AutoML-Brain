@@ -1,0 +1,23 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: llm-reporting-job
+  namespace: automl-brain
+spec:
+  backoffLimit: 0
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: llm-reporting
+          image: 199964507152.dkr.ecr.us-east-1.amazonaws.com/automl-brain-llm-agent:latest
+          imagePullPolicy: Always
+          env:
+            - name: OPENAI_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: openai-secret
+                  key: api-key
+          command: ["/bin/sh", "-c"]
+          args:
+            - python reporting_agent.py && sleep 300

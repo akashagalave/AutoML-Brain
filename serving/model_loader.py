@@ -1,8 +1,10 @@
-import json
 import os
-from pathlib import Path
+import json
 import lightgbm as lgb
 import shap
+import mlflow
+from mlflow.tracking import MlflowClient
+from tempfile import TemporaryDirectory
 
 _booster = None
 _threshold = None
@@ -15,7 +17,9 @@ _explainer = None
 
 
 def load_model_assets():
-    global _booster, _threshold, _feature_columns, _feature_stats, _categorical_columns, _categorical_indices, _category_maps, _explainer
+    global _booster, _threshold, _feature_columns, _feature_stats
+    global _categorical_columns, _categorical_indices
+    global _category_maps, _explainer
 
     if _booster is not None:
         return (
@@ -34,25 +38,33 @@ def load_model_assets():
     os.environ["NUMEXPR_NUM_THREADS"] = "1"
     os.environ["OPENBLAS_NUM_THREADS"] = "1"
 
-    base_dir = Path(__file__).resolve().parents[1]
-    model_dir = base_dir / "models" / "model_artifacts"
+    model_stage = os.getenv("MODEL_STAGE", "Production")
+    model_uri = f"models:/churn_model/{model_stage}"
 
-    _booster = lgb.Booster(
-        model_file=str(model_dir / "model.txt")
-    )
+    print(f"Loading model from MLflow stage: {model_stage}")
 
+    # Download MLflow artifact locally
+    local_path = mlflow.artifacts.download_artifacts(model_uri)
+
+    model_file = os.path.join(local_path, "model.txt")
+    threshold_file = os.path.join(local_path, "best_threshold.json")
+    feature_cols_file = os.path.join(local_path, "feature_columns.json")
+    categorical_cols_file = os.path.join(local_path, "categorical_columns.json")
+    feature_stats_file = os.path.join(local_path, "feature_stats.json")
+
+    _booster = lgb.Booster(model_file=model_file)
     _explainer = shap.TreeExplainer(_booster)
 
-    with open(model_dir / "best_threshold.json") as f:
+    with open(threshold_file) as f:
         _threshold = json.load(f)["threshold"]
 
-    with open(model_dir / "feature_columns.json") as f:
+    with open(feature_cols_file) as f:
         _feature_columns = json.load(f)
 
-    with open(model_dir / "categorical_columns.json") as f:
+    with open(categorical_cols_file) as f:
         _categorical_columns = json.load(f)
 
-    with open(model_dir / "feature_stats.json") as f:
+    with open(feature_stats_file) as f:
         _feature_stats = json.load(f)
 
     _categorical_indices = [

@@ -1,0 +1,36 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: inference-stable
+  namespace: automl-brain
+  labels:
+    app: churn-inference
+    track: stable
+spec:
+  replicas: 4
+  selector:
+    matchLabels:
+      app: churn-inference
+      track: stable
+  template:
+    metadata:
+      labels:
+        app: churn-inference
+        track: stable
+    spec:
+      containers:
+      - name: churn-inference
+        image: 199964507152.dkr.ecr.us-east-1.amazonaws.com/automl-brain-inference:latest
+        imagePullPolicy: Always
+        env:
+        - name: MODEL_STAGE
+          value: "Production"
+        ports:
+        - containerPort: 8000
+        resources:
+          requests:
+            cpu: "500m"
+            memory: "512Mi"
+          limits:
+            cpu: "1500m"
+            memory: "1Gi"

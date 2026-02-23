@@ -1,0 +1,30 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: deployment-agent-sa
+  namespace: automl-brain
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: deployment-agent-role
+  namespace: automl-brain
+rules:
+- apiGroups: ["apps"]
+  resources: ["deployments"]
+  verbs: ["get", "list", "patch", "update"]
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: deployment-agent-binding
+  namespace: automl-brain
+subjects:
+- kind: ServiceAccount
+  name: deployment-agent-sa
+roleRef:
+  kind: Role
+  name: deployment-agent-role
+  apiGroup: rbac.authorization.k8s.io
