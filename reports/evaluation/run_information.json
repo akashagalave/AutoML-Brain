@@ -1,0 +1,11 @@
+{
+    "run_id": "4ca521618bef4b3995768ae8c808c496",
+    "model_uri": "runs:/4ca521618bef4b3995768ae8c808c496/model_artifacts/calibrated_model.joblib",
+    "model_type": "lightgbm_calibrated",
+    "threshold": 0.28757739938080495,
+    "metrics": {
+        "roc_auc": 0.834164159665407,
+        "f1": 0.6451896813353566,
+        "accuracy": 0.7663197729422895
+    }
+}
