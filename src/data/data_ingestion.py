@@ -32,7 +32,6 @@ def clean_data(df: pd.DataFrame) -> pd.DataFrame:
 
 def split_data(df: pd.DataFrame):
 
-    # 70% train
     train_df, temp_df = train_test_split(
         df,
         test_size=0.3,
@@ -41,7 +40,7 @@ def split_data(df: pd.DataFrame):
         random_state=42
     )
 
-    # 15% validation, 15% test
+
     val_df, test_df = train_test_split(
         temp_df,
         test_size=0.5,

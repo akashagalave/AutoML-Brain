@@ -125,9 +125,7 @@ best_params.update({
 
 logger.info(f"Best Params: {best_params}")
 
-# =====================================================
-# TRAIN FINAL MODEL
-# =====================================================
+
 
 model = lgb.LGBMClassifier(**best_params)
 
@@ -138,10 +136,6 @@ model.fit(
 )
 
 logger.info("Final model trained.")
-
-# =====================================================
-# THRESHOLD OPTIMIZATION
-# =====================================================
 
 y_prob = model.predict_proba(X_val)[:, 1]
 
@@ -157,9 +151,6 @@ logger.info(f"Validation ROC-AUC: {roc_auc:.4f}")
 logger.info(f"Validation F1: {f1:.4f}")
 logger.info(f"Best Threshold: {best_threshold:.4f}")
 
-# =====================================================
-# SAVE MODEL ARTIFACTS
-# =====================================================
 
 model.booster_.save_model(str(MODEL_DIR / "model.txt"))
 
@@ -172,7 +163,6 @@ with open(MODEL_DIR / "categorical_columns.json", "w") as f:
 with open(MODEL_DIR / "best_threshold.json", "w") as f:
     json.dump({"threshold": float(best_threshold)}, f)
 
-# 🔥 SAVE TRAINING STATISTICS FOR SERVING
 
 feature_stats = {
     "monthly_charge_75th": float(
@@ -185,9 +175,6 @@ with open(MODEL_DIR / "feature_stats.json", "w") as f:
 
 logger.info("Model artifacts saved successfully.")
 
-# =====================================================
-# SHAP (OFFLINE ONLY)
-# =====================================================
 
 logger.info("Generating SHAP reports...")
 

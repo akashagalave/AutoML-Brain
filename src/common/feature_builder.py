@@ -1,8 +1,5 @@
 import numpy as np
 
-# ==============================
-# STATIC CONSTANTS (Module Load)
-# ==============================
 
 SERVICE_COLS = (
     "OnlineSecurity",
@@ -48,19 +45,18 @@ def build_feature_vector(
 
     monthly_75 = feature_stats["monthly_charge_75th"]
 
-    # --- Base numeric values ---
     tenure = int(raw["tenure"])
     monthly = float(raw["MonthlyCharges"])
     total_charges = float(raw["TotalCharges"])
 
-    # --- Derived features ---
+  
     charges_per_month = total_charges / (tenure + 1)
     clv_proxy = monthly * tenure
     avg_charge_per_tenure = total_charges / (tenure + 1)
 
     tenure_bucket = _tenure_bucket_fast(tenure)
 
-    # Service aggregation
+ 
     num_services = 0
     for col in SERVICE_COLS:
         if raw[col] == "Yes":
@@ -80,10 +76,9 @@ def build_feature_vector(
         1 if (high_monthly_charge and raw["OnlineSecurity"] == "No") else 0
     )
 
-    # --- Build vector directly ---
+  
     vector = np.empty(len(feature_columns), dtype=np.float32)
 
-    # Convert categorical list to set once (fast membership)
     categorical_set = set(categorical_columns)
 
     for i, col in enumerate(feature_columns):
@@ -115,7 +110,7 @@ def build_feature_vector(
         else:
             val = raw[col]
 
-        # Categorical encoding
+  
         if col in categorical_set:
             val = category_maps.get(col, {}).get(str(val), 0)
 

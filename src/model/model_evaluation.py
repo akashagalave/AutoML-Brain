@@ -9,9 +9,6 @@ from pathlib import Path
 from sklearn.metrics import roc_auc_score, f1_score, accuracy_score
 
 
-# =====================================================
-# INIT MLFLOW
-# =====================================================
 
 dagshub.init(
     repo_owner="akashagalaveaaa1",
@@ -23,19 +20,12 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("model_evaluation")
 
 
-# =====================================================
-# PATHS
-# =====================================================
 
 TEST_PATH = "data/processed/test_features.csv"
 MODEL_DIR = Path("models/model_artifacts")
 REPORT_DIR = Path("reports/evaluation")
 REPORT_DIR.mkdir(parents=True, exist_ok=True)
 
-
-# =====================================================
-# LOAD TEST DATA
-# =====================================================
 
 logger.info("Loading test dataset...")
 df = pd.read_csv(TEST_PATH)
@@ -46,19 +36,11 @@ X = df.drop(columns=[TARGET])
 y = df[TARGET]
 
 
-# =====================================================
-# LOAD FEATURE SCHEMA
-# =====================================================
-
 with open(MODEL_DIR / "feature_columns.json", "r") as f:
     feature_columns = json.load(f)
 
 X = X[feature_columns]
 
-
-# =====================================================
-# FIX CATEGORICAL TYPES
-# =====================================================
 
 categorical_cols = X.select_dtypes(include="object").columns.tolist()
 
@@ -68,18 +50,11 @@ for col in categorical_cols:
 logger.info(f"Categorical columns restored: {categorical_cols}")
 
 
-# =====================================================
-# LOAD MODEL
-# =====================================================
 
 model_path = MODEL_DIR / "model.txt"
 logger.info("Loading LightGBM native booster...")
 model = lgb.Booster(model_file=str(model_path))
 
-
-# =====================================================
-# EVALUATION + MLFLOW LOGGING
-# =====================================================
 
 with mlflow.start_run() as run:
 
@@ -105,22 +80,20 @@ with mlflow.start_run() as run:
     logger.info(f"F1: {f1:.4f}")
     logger.info(f"Accuracy: {accuracy:.4f}")
 
-    # Log metrics
+    
     mlflow.log_metrics(metrics)
 
-    # 🔥 IMPORTANT: log model.txt as artifact manually
+   
     mlflow.log_artifact(str(model_path), artifact_path="model_artifacts")
 
     run_id = run.info.run_id
 
-    # Correct URI for artifact-based model
     model_uri = f"runs:/{run_id}/model_artifacts/model.txt"
 
-    # Save metrics report
+
     with open(REPORT_DIR / "metrics.json", "w") as f:
         json.dump(metrics, f, indent=4)
 
-    # Create run_information.json
     run_information = {
         "run_id": run_id,
         "model_uri": model_uri,

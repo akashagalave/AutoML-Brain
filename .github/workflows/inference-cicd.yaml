@@ -1,0 +1,57 @@
+name: AutoML Brain - Inference CI/CD
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "serving/**"
+      - "app.py"
+      - "model_loader.py"
+      - "schema.py"
+      - "metrics.py"
+      - "requirements.txt"
+      - "docker/**"
+
+env:
+  AWS_REGION: us-east-1
+  ECR_REGISTRY: 199964507152.dkr.ecr.us-east-1.amazonaws.com
+  CLUSTER_NAME: automl-brain-cluster
+  NAMESPACE: automl-brain
+
+jobs:
+  deploy-inference:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build inference Docker image
+        run: |
+          docker build -t automl-brain-inference -f serving/Dockerfile .
+
+      - name: Push inference image to ECR
+        run: |
+          docker tag automl-brain-inference:latest \
+            $ECR_REGISTRY/automl-brain-inference:latest
+          docker push $ECR_REGISTRY/automl-brain-inference:latest
+
+      - name: Update kubeconfig
+        run: |
+          aws eks update-kubeconfig \
+            --region $AWS_REGION \
+            --name $CLUSTER_NAME
+
+      - name: Restart stable inference deployment
+        run: |
+          kubectl rollout restart deployment inference-stable -n $NAMESPACE

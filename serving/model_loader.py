@@ -43,7 +43,7 @@ def load_model_assets():
 
     print(f"Loading model from MLflow stage: {model_stage}")
 
-    # Download MLflow artifact locally
+   
     local_path = mlflow.artifacts.download_artifacts(model_uri)
 
     model_file = os.path.join(local_path, "model.txt")

@@ -6,7 +6,7 @@ from pathlib import Path
 
 def calculate_psi(expected, actual, bins=10):
 
-    # Define bins from expected (train) distribution
+
     breakpoints = np.percentile(expected, np.linspace(0, 100, bins + 1))
     breakpoints[0] -= 1e-6
     breakpoints[-1] += 1e-6
@@ -39,7 +39,6 @@ if __name__ == "__main__":
 
     drift_report = {}
 
-    # Only numeric columns
     numeric_cols = train_df.select_dtypes(include=["int64", "float64"]).columns
 
     for col in numeric_cols:

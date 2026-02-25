@@ -4,9 +4,6 @@ import mlflow
 from mlflow.tracking import MlflowClient
 
 
-# -----------------------------
-# Init
-# -----------------------------
 
 dagshub.init(
     repo_owner="akashagalaveaaa1",
@@ -33,9 +30,6 @@ def main():
 
     client = MlflowClient()
 
-    # -----------------------------
-    # Get latest Staging model
-    # -----------------------------
 
     staging_versions = client.get_latest_versions(
         name=MODEL_NAME,
@@ -57,9 +51,6 @@ def main():
 
     logger.info(f"Staging ROC-AUC: {staging_metric}")
 
-    # -----------------------------
-    # Get current Production model
-    # -----------------------------
 
     production_versions = client.get_latest_versions(
         name=MODEL_NAME,
@@ -88,9 +79,6 @@ def main():
 
     logger.info(f"Production ROC-AUC: {production_metric}")
 
-    # -----------------------------
-    # Compare
-    # -----------------------------
 
     if staging_metric > production_metric:
         logger.info("New model is better. Promoting to Production.")

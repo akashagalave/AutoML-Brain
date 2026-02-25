@@ -13,9 +13,6 @@ from .schema import PredictionRequest, PredictionResponse
 from .config import APP_NAME, MODEL_VERSION
 from src.common.feature_builder import build_feature_vector
 
-# ==============================
-# Optional Redis
-# ==============================
 REDIS_ENABLED = os.getenv("REDIS_ENABLED", "false").lower() == "true"
 redis_client = None
 
@@ -27,17 +24,11 @@ if REDIS_ENABLED:
         decode_responses=True
     )
 
-# ==============================
-# FastAPI App
-# ==============================
 app = FastAPI(
     title=APP_NAME,
     default_response_class=ORJSONResponse
 )
 
-# ==============================
-# Prometheus Metrics
-# ==============================
 LATENCY_BUCKETS = (
     0.05, 0.1, 0.2,
     0.3, 0.5,
@@ -53,9 +44,7 @@ request_latency = Histogram(
     buckets=LATENCY_BUCKETS
 )
 
-# ==============================
-# Global Model Assets
-# ==============================
+
 booster = None
 threshold = None
 feature_columns = None
@@ -92,9 +81,6 @@ async def metrics_middleware(request, call_next):
     return response
 
 
-# ==============================
-# FAST PREDICT
-# ==============================
 @app.post("/predict", response_model=PredictionResponse)
 def predict(request: PredictionRequest):
 
@@ -126,9 +112,6 @@ def predict(request: PredictionRequest):
     )
 
 
-# ==============================
-# EXPLAIN ENDPOINT
-# ==============================
 @app.post("/predict/explain")
 def predict_with_explain(request: PredictionRequest):
 
@@ -149,7 +132,6 @@ def predict_with_explain(request: PredictionRequest):
         )[0]
     )
 
-    # SHAP values
     shap_values = explainer.shap_values(vector)
 
     if isinstance(shap_values, list):
@@ -157,7 +139,6 @@ def predict_with_explain(request: PredictionRequest):
 
     shap_values = shap_values[0]
 
-    # Top 3 impactful features
     abs_vals = np.abs(shap_values)
     top_indices = np.argsort(abs_vals)[-3:][::-1]
 
@@ -183,9 +164,6 @@ def predict_with_explain(request: PredictionRequest):
     }
 
 
-# ==============================
-# Health & Metrics
-# ==============================
 @app.get("/health")
 def health():
     return {

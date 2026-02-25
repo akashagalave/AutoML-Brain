@@ -2,7 +2,6 @@ from kubernetes import client, config
 import time
 import logging
 
-# ===== Retrain Protection Config =====
 RETRAIN_COOLDOWN_SECONDS = 3600  # 1 hour safety cooldown
 
 _last_retrain_time = 0
@@ -63,12 +62,12 @@ def trigger_retraining_job(namespace: str):
 
     now = time.time()
 
-    # Cooldown guard
+
     if now - _last_retrain_time < RETRAIN_COOLDOWN_SECONDS:
         logging.warning("Retrain skipped — cooldown active.")
         return
 
-    # Running job guard
+
     if retrain_job_running(namespace):
         logging.warning("Retrain skipped — job already running.")
         return

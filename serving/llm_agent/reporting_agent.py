@@ -159,7 +159,7 @@ def main():
 
     generate_pdf(report)
 
-    print("✅ Governance report generated successfully")
+    print("Governance report generated successfully")
 
 
 if __name__ == "__main__":

@@ -34,7 +34,6 @@ TARGET_COL = "Churn"
 
 def build_features(df):
 
-    # Convert categorical columns to category dtype (CRITICAL)
     for col in CATEGORICAL_COLS:
         df[col] = df[col].astype("category")
 

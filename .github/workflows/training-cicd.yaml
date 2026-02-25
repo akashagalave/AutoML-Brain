@@ -1,0 +1,62 @@
+name: AutoML Brain - Training Pipeline
+
+on:
+  workflow_dispatch:
+    inputs:
+      reason:
+        description: "Reason for retraining"
+        required: false
+        default: "manual retrain"
+  schedule:
+    - cron: "0 2 * * 0"   # Weekly retraining (Sunday 2 AM UTC)
+
+env:
+  AWS_REGION: us-east-1
+  ECR_REGISTRY: 199964507152.dkr.ecr.us-east-1.amazonaws.com
+  CLUSTER_NAME: automl-brain-cluster
+  NAMESPACE: automl-brain
+
+jobs:
+  retrain:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Log retrain reason
+        run: |
+          echo "Retrain reason: ${{ github.event.inputs.reason }}"
+          echo "Triggered by: ${{ github.event_name }}"
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build training Docker image
+        run: |
+          docker build -t automl-brain-training \
+            -f serving/training/Dockerfile .
+
+      - name: Push training image to ECR
+        run: |
+          docker tag automl-brain-training:latest \
+            $ECR_REGISTRY/automl-brain-training:latest
+          docker push $ECR_REGISTRY/automl-brain-training:latest
+
+      - name: Update kubeconfig
+        run: |
+          aws eks update-kubeconfig \
+            --region $AWS_REGION \
+            --name $CLUSTER_NAME
+
+      - name: Trigger retraining Kubernetes job
+        run: |
+          kubectl delete job retrain-job -n $NAMESPACE --ignore-not-found=true
+          kubectl apply -f infrastructure/kubernetes/retraining/retrain-job.yaml

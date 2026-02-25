@@ -8,17 +8,16 @@ INTERIM = ROOT / "data" / "interim"
 PROCESSED = ROOT / "data" / "processed"
 PROCESSED.mkdir(parents=True, exist_ok=True)
 
-# Train
+
 train_df = pd.read_csv(INTERIM / "train_cleaned.csv")
 train_features = build_features(train_df)
 train_features.to_csv(PROCESSED / "train_features.csv", index=False)
 
-# Validation
 val_df = pd.read_csv(INTERIM / "validation_cleaned.csv")
 val_features = build_features(val_df)
 val_features.to_csv(PROCESSED / "validation_features.csv", index=False)
 
-# Test
+
 test_df = pd.read_csv(INTERIM / "test_cleaned.csv")
 test_features = build_features(test_df)
 test_features.to_csv(PROCESSED / "test_features.csv", index=False)

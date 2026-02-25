@@ -3,9 +3,6 @@ import dagshub
 from mlflow.tracking import MlflowClient
 
 
-# =====================================================
-# INIT
-# =====================================================
 
 dagshub.init(
     repo_owner="akashagalaveaaa1",
@@ -30,7 +27,6 @@ def main():
         f"name='{MODEL_NAME}'"
     )
 
-    # Filter versions in Staging
     staging_versions = [
         v for v in versions if v.current_stage == SOURCE_STAGE
     ]
@@ -40,7 +36,6 @@ def main():
             f"No model found in stage '{SOURCE_STAGE}'"
         )
 
-    # Take latest version
     latest_version = sorted(
         staging_versions,
         key=lambda x: int(x.version),
