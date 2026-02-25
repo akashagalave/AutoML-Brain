@@ -12,22 +12,14 @@ from pathlib import Path
 from sklearn.model_selection import StratifiedKFold
 from sklearn.metrics import roc_auc_score, f1_score, precision_recall_curve
 
-# =====================================================
-# MATPLOTLIB HEADLESS
-# =====================================================
 
 matplotlib.use("Agg")
 
-# =====================================================
-# LOGGING
-# =====================================================
+
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("model_building")
 
-# =====================================================
-# PATHS
-# =====================================================
 
 TRAIN_PATH = "data/processed/train_features.csv"
 VAL_PATH = "data/processed/validation_features.csv"
@@ -38,9 +30,6 @@ REPORT_DIR = Path("reports/shap")
 MODEL_DIR.mkdir(parents=True, exist_ok=True)
 REPORT_DIR.mkdir(parents=True, exist_ok=True)
 
-# =====================================================
-# LOAD DATA
-# =====================================================
 
 logger.info("Loading training and validation data...")
 
@@ -55,9 +44,6 @@ y_train = train_df[TARGET]
 X_val = val_df.drop(columns=[TARGET])
 y_val = val_df[TARGET]
 
-# =====================================================
-# HANDLE CATEGORICALS
-# =====================================================
 
 categorical_cols = X_train.select_dtypes(include="object").columns.tolist()
 
@@ -67,9 +53,6 @@ for col in categorical_cols:
 
 logger.info(f"Categorical columns: {categorical_cols}")
 
-# =====================================================
-# OPTUNA OBJECTIVE
-# =====================================================
 
 def objective(trial):
 
@@ -106,9 +89,7 @@ def objective(trial):
 
     return np.mean(scores)
 
-# =====================================================
-# RUN OPTUNA
-# =====================================================
+
 
 logger.info("Starting Optuna tuning...")
 study = optuna.create_study(direction="maximize")
