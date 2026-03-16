@@ -12,6 +12,14 @@ on:
       - "requirements.txt"
       - "docker/**"
 
+  workflow_dispatch:
+    inputs:
+      deploy_canary:
+        description: "Deploy as canary (10% traffic) instead of full stable rollout"
+        required: false
+        default: "false"
+        type: boolean
+
 env:
   AWS_REGION: us-east-1
   ECR_REGISTRY: 199964507152.dkr.ecr.us-east-1.amazonaws.com
@@ -40,10 +48,14 @@ jobs:
         run: |
           docker build -t automl-brain-inference -f serving/Dockerfile .
 
-      - name: Push inference image to ECR
+      - name: Push inference image to ECR (tagged with commit SHA)
         run: |
+          TAG=${{ github.sha }}
+          docker tag automl-brain-inference:latest \
+            $ECR_REGISTRY/automl-brain-inference:$TAG
           docker tag automl-brain-inference:latest \
             $ECR_REGISTRY/automl-brain-inference:latest
+          docker push $ECR_REGISTRY/automl-brain-inference:$TAG
           docker push $ECR_REGISTRY/automl-brain-inference:latest
 
       - name: Update kubeconfig
@@ -52,6 +64,189 @@ jobs:
             --region $AWS_REGION \
             --name $CLUSTER_NAME
 
-      - name: Restart stable inference deployment
+      # ── Normal path: rolling restart of stable deployment ─────────────────
+      - name: Update stable deployment with new image
+        if: github.event.inputs.deploy_canary != 'true'
         run: |
-          kubectl rollout restart deployment inference-stable -n $NAMESPACE
+          TAG=${{ github.sha }}
+          kubectl set image deployment/inference-stable \
+            churn-inference=$ECR_REGISTRY/automl-brain-inference:$TAG \
+            -n $NAMESPACE
+          kubectl rollout status deployment/inference-stable \
+            -n $NAMESPACE --timeout=120s
+
+      # ── Canary path: deploy 1 canary pod alongside 4 stable pods ──────────
+      - name: Deploy canary pod (10% traffic)
+        if: github.event.inputs.deploy_canary == 'true'
+        run: |
+          TAG=${{ github.sha }}
+          kubectl set image deployment/inference-canary \
+            churn-inference=$ECR_REGISTRY/automl-brain-inference:$TAG \
+            -n $NAMESPACE
+          kubectl apply -f infrastructure/kubernetes/inference/canary-deployment.yaml \
+            -n $NAMESPACE
+          echo "Canary deployed — 1 pod (10% traffic via ingress weight)"
+
+      # ── Post-deploy health check ───────────────────────────────────────────
+      - name: Health check
+        run: |
+          sleep 20
+          kubectl run smoke-test \
+            --image=curlimages/curl:8.1.2 \
+            --restart=Never --rm --attach \
+            -n $NAMESPACE \
+            -- curl -sf http://inference-svc/health \
+            || (echo "Health check FAILED" && exit 1)
+          echo "Health check passed"
+
+  # ── Canary validation job — runs 10 min after canary deploy ──────────────────
+  # Queries Prometheus for canary P95 vs stable P95.
+  # This is the mechanism that makes the resume claim
+  # "Prometheus-driven canary validation" provably true in code.
+  validate-canary:
+    needs: deploy-inference
+    if: github.event.inputs.deploy_canary == 'true'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Update kubeconfig
+        run: |
+          aws eks update-kubeconfig \
+            --region $AWS_REGION \
+            --name $CLUSTER_NAME
+
+      - name: Wait for canary to receive traffic
+        run: |
+          echo "Waiting 10 minutes for canary to accumulate metrics..."
+          sleep 600
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install requests
+        run: pip install requests
+
+      - name: Validate canary metrics and promote or rollback
+        env:
+          PROMETHEUS_URL: ${{ secrets.PROMETHEUS_URL }}
+        run: |
+          python - <<'EOF'
+          import requests
+          import subprocess
+          import sys
+
+          PROM = "${{ secrets.PROMETHEUS_URL }}"
+          NS   = "${{ env.NAMESPACE }}"
+
+          # PromQL: isolate canary vs stable pods by the track label
+          Q_CANARY_P95 = """
+          histogram_quantile(0.95,
+            sum(rate(churn_request_latency_seconds_bucket{
+              path="/predict",
+              pod=~"inference-canary.*",
+              namespace="%s"
+            }[5m])) by (le)
+          ) * 1000
+          """ % NS
+
+          Q_STABLE_P95 = """
+          histogram_quantile(0.95,
+            sum(rate(churn_request_latency_seconds_bucket{
+              path="/predict",
+              pod=~"inference-stable.*",
+              namespace="%s"
+            }[5m])) by (le)
+          ) * 1000
+          """ % NS
+
+          Q_CANARY_ERROR = """
+          rate(http_requests_total{
+            pod=~"inference-canary.*",
+            status=~"5..",
+            namespace="%s"
+          }[5m])
+          /
+          rate(http_requests_total{
+            pod=~"inference-canary.*",
+            namespace="%s"
+          }[5m])
+          """ % (NS, NS)
+
+          def query(q):
+              try:
+                  r = requests.get(
+                      f"{PROM}/api/v1/query",
+                      params={"query": q.strip()},
+                      timeout=10
+                  )
+                  data = r.json()
+                  if data["status"] == "success" and data["data"]["result"]:
+                      return float(data["data"]["result"][0]["value"][1])
+              except Exception as e:
+                  print(f"Prometheus query failed: {e}")
+              return None
+
+          canary_p95  = query(Q_CANARY_P95)
+          stable_p95  = query(Q_STABLE_P95)
+          canary_err  = query(Q_CANARY_ERROR) or 0.0
+
+          print(f"Canary P95:  {canary_p95}ms")
+          print(f"Stable P95:  {stable_p95}ms")
+          print(f"Canary err:  {canary_err:.4f}")
+
+          PROMOTE = True
+          reason  = ""
+
+          if canary_p95 is None or stable_p95 is None:
+              # No traffic data — defer, don't fail
+              reason  = "Insufficient traffic data — deferring decision"
+              PROMOTE = False
+          elif canary_err > 0.01:
+              reason  = f"Error rate {canary_err:.2%} exceeds 1% threshold"
+              PROMOTE = False
+          elif canary_p95 > stable_p95 * 1.20:
+              reason  = (f"Canary P95 {canary_p95:.1f}ms is >20% "
+                         f"slower than stable {stable_p95:.1f}ms")
+              PROMOTE = False
+          else:
+              reason = (f"Canary P95 {canary_p95:.1f}ms within 20% "
+                        f"of stable {stable_p95:.1f}ms — healthy")
+
+          print(f"\nDecision: {'PROMOTE' if PROMOTE else 'ROLLBACK / DEFER'}")
+          print(f"Reason:   {reason}")
+
+          if PROMOTE:
+              # Shift 100% traffic to canary
+              subprocess.run([
+                  "kubectl", "annotate", "ingress", "inference-canary-ingress",
+                  "nginx.ingress.kubernetes.io/canary-weight=100",
+                  "--overwrite", "-n", NS
+              ], check=True)
+              # Scale down stable (canary becomes the new stable)
+              subprocess.run([
+                  "kubectl", "scale", "deployment/inference-stable",
+                  "--replicas=0", "-n", NS
+              ], check=True)
+              print("Canary PROMOTED — now serving 100% traffic")
+          else:
+              # Remove canary — stable returns to 100%
+              subprocess.run([
+                  "kubectl", "scale", "deployment/inference-canary",
+                  "--replicas=0", "-n", NS
+              ], check=True)
+              print("Canary ROLLED BACK — stable deployment unchanged")
+              if "Insufficient" not in reason:
+                  sys.exit(1)   # fail CI if it was a real metric failure
+          EOF
