@@ -302,9 +302,13 @@ These signals directly feed into **automated governance decisions**.
 > Inference changes often. Training should not.
 
 ---
+### AWS Load Balancer Access
+
+![ALB Prediction](docs/images/alb-prediction.png)
 
 
-
+### Locust P95 Testing
+![Locust-Testing](docs/images/Locust-Testing.png)
 
 ## 🧰 Tech Stack
 
