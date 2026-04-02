@@ -16,3 +16,4 @@ seaborn
 awscli
 shap
 orjson
+httpx

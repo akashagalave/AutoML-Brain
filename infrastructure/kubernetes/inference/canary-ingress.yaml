@@ -1,0 +1,30 @@
+# canary-ingress.yaml — NGINX Ingress for canary traffic splitting
+# This was MISSING from the project — CI/CD references it but it didn't exist.
+#
+# How it works:
+#   inference-ingress        → 100% to stable (always present)
+#   inference-canary-ingress → canary-weight % mirrored to canary pods
+#
+# CI/CD workflow patches canary-weight annotation to promote/rollback.
+# Default weight=10 means 10% of traffic hits canary when deployed.
+# After validation: weight set to 100 (promote) or canary scaled to 0 (rollback).
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: inference-canary-ingress
+  namespace: automl-brain
+  annotations:
+    nginx.ingress.kubernetes.io/canary: "true"
+    nginx.ingress.kubernetes.io/canary-weight: "10"   # 10% traffic to canary
+spec:
+  ingressClassName: nginx
+  rules:
+  - http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: inference-canary-service   # → canary pods only
+            port:
+              number: 80

@@ -34,14 +34,7 @@ def build_feature_vector(
     categorical_columns: list,
     category_maps: dict,
 ):
-    """
-    Ultra-optimized inference feature builder.
 
-    - No dict copy
-    - No dict update
-    - No dynamic object allocation except final vector
-    - Minimal branching
-    """
 
     monthly_75 = feature_stats["monthly_charge_75th"]
 

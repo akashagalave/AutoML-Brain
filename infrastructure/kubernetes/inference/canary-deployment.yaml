@@ -25,6 +25,10 @@ spec:
         env:
         - name: MODEL_STAGE
           value: "Staging"
+        # IMPORTANT: shadow traffic disabled on canary pods.
+        # If enabled, canary would mirror back to itself → infinite loop.
+        - name: CANARY_SHADOW_URL
+          value: ""
         ports:
         - containerPort: 8000
         resources:
@@ -34,3 +38,19 @@ spec:
           limits:
             cpu: "1000m"
             memory: "512Mi"
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8000
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          timeoutSeconds: 2
+          failureThreshold: 3
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8000
+          initialDelaySeconds: 20
+          periodSeconds: 10
+          timeoutSeconds: 2
+          failureThreshold: 3

@@ -7,8 +7,6 @@ on:
         description: "Reason for retraining"
         required: false
         default: "manual retrain"
-  schedule:
-    - cron: "0 2 * * 0"   # Weekly retraining (Sunday 2 AM UTC)
 
 env:
   AWS_REGION: us-east-1
