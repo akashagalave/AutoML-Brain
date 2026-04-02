@@ -19,11 +19,6 @@ from .config import APP_NAME, MODEL_VERSION
 from src.common.feature_builder import build_feature_vector
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# Shadow traffic config
-# Canary service DNS inside the cluster (K8s internal service name)
-# Set CANARY_SHADOW_URL="" to disable shadow traffic (e.g. on canary pods themselves)
-# ─────────────────────────────────────────────────────────────────────────────
 CANARY_SHADOW_URL = os.getenv(
     "CANARY_SHADOW_URL",
     "http://inference-canary-service.automl-brain.svc.cluster.local:80",
@@ -76,11 +71,11 @@ churn_probability_histogram = Histogram(
     buckets=(0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0),
 )
 
-# Counter to track shadow mirror calls (useful for dashboards)
+
 shadow_mirror_total = Counter(
     "churn_shadow_mirror_total",
     "Total requests mirrored to canary for shadow validation",
-    ["status"],  # "success" | "error" | "disabled"
+    ["status"],  
 )
 
 
@@ -122,11 +117,6 @@ async def metrics_middleware(request: Request, call_next):
     return response
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# Shadow traffic helper
-# Fire-and-forget: mirrors the payload to canary asynchronously.
-# User latency is NOT affected — we never await this in the main path.
-# ─────────────────────────────────────────────────────────────────────────────
 async def _mirror_to_canary(payload: dict) -> None:
     """Async shadow call to canary /predict. Errors are swallowed intentionally."""
     if not SHADOW_ENABLED:
@@ -144,14 +134,7 @@ async def _mirror_to_canary(payload: dict) -> None:
 
 @app.post("/predict", response_model=PredictionResponse)
 async def predict(request: PredictionRequest, background_tasks: BackgroundTasks):
-    """
-    Real-time churn inference (stable model).
 
-    Shadow traffic: every request is asynchronously mirrored to the canary
-    deployment via a background task. This ensures the canary receives real
-    production data for Prometheus metric collection without affecting user
-    latency or response.
-    """
     input_dict = request.features.model_dump()
 
     def _infer():
@@ -185,10 +168,6 @@ async def predict(request: PredictionRequest, background_tasks: BackgroundTasks)
 
     churn_probability_histogram.labels(model_version=MODEL_VERSION).observe(prob)
 
-    # ── Shadow traffic: mirror to canary in background (non-blocking) ──────
-    # BackgroundTasks runs AFTER the response is sent to the user.
-    # Canary pod processes this and emits its own Prometheus metrics,
-    # enabling the deployment agent to compare stable vs canary P95 latency.
     background_tasks.add_task(_mirror_to_canary, request.model_dump())
 
     return PredictionResponse(

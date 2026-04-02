@@ -25,10 +25,7 @@ spec:
         env:
         - name: MODEL_STAGE
           value: "Production"
-        # Shadow traffic: mirrors every /predict request to canary pod async.
-        # Ensures canary has real production data for Prometheus P95 comparison
-        # in the Deployment Agent evaluate_canary() function.
-        # Set to "" on canary pods to prevent infinite request loops.
+
         - name: CANARY_SHADOW_URL
           value: "http://inference-canary-service.automl-brain.svc.cluster.local:80"
         - name: SHADOW_TIMEOUT_SECONDS

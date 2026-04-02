@@ -1,10 +1,4 @@
-# canary-service.yaml — Dedicated ClusterIP service for canary pods
-# MISSING from original project — added to support:
-#   1. Ingress-based canary traffic (CI/CD path)
-#   2. Shadow traffic from stable pods (Deployment Agent path)
-#
-# selector: track: canary → routes ONLY to inference-canary pods
-# stable inference-service continues routing 100% to track: stable pods
+
 apiVersion: v1
 kind: Service
 metadata:
