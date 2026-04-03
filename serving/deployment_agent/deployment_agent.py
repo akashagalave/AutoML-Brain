@@ -71,7 +71,7 @@ def get_staging_version():
 
 
 def promote_model_to_production(version_obj):
-    """Promote a specific already-identified staging version to Production."""
+    """Promote a specific staging version to Production only after canary passes."""
     mlflow_client = MlflowClient()
 
     logger.info(f"Promoting model version {version_obj.version} to Production")
@@ -84,22 +84,6 @@ def promote_model_to_production(version_obj):
     )
 
     return version_obj.version
-
-
-def rollback_model_to_staging(version_obj):
-
-    mlflow_client = MlflowClient()
-
-    logger.warning(
-        f"Rolling back model version {version_obj.version} from Production → Staging"
-    )
-
-    mlflow_client.transition_model_version_stage(
-        name=MODEL_NAME,
-        version=version_obj.version,
-        stage="Staging",
-        archive_existing_versions=False,
-    )
 
 
 def restart_canary_deployment():
@@ -131,6 +115,7 @@ def restart_canary_deployment():
 
 
 def restart_stable_deployment():
+    """Rolling-restart stable pods so they load the newly promoted Production model."""
     logger.info("Restarting stable deployment...")
 
     config.load_incluster_config()
@@ -184,6 +169,7 @@ def evaluate_canary():
 
 
 def main():
+
     staging_version = get_staging_version()
     if not staging_version:
         logger.info("No staging model found. Nothing to promote.")
@@ -191,22 +177,19 @@ def main():
 
     restart_canary_deployment()
 
-    version = promote_model_to_production(staging_version)
-
     safe = evaluate_canary()
 
     if safe:
- 
+
+        version = promote_model_to_production(staging_version)
+
         restart_stable_deployment()
         logger.info(
             f"Model version {version} promoted and stable deployment updated."
         )
     else:
-
-        rollback_model_to_staging(staging_version)
         logger.warning(
-            "Canary failed evaluation. MLflow rolled back to Staging. "
-            "Stable deployment untouched."
+            "Canary failed evaluation. No promotion. Stable deployment untouched."
         )
 
 
