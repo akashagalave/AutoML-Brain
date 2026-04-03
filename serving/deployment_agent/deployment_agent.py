@@ -11,6 +11,7 @@ logger = logging.getLogger("deployment_agent")
 MODEL_NAME = "churn_model"
 NAMESPACE = "automl-brain"
 STABLE_DEPLOYMENT = "inference-stable"
+CANARY_DEPLOYMENT = "inference-canary"
 
 PROMETHEUS_URL = "http://kube-prometheus-stack-prometheus.monitoring.svc.cluster.local:9090"
 
@@ -57,39 +58,76 @@ def get_p95(track):
     return query_prometheus(query)
 
 
-def promote_model_to_production():
+def get_staging_version():
+    """Return latest Staging version object without promoting it."""
     mlflow_client = MlflowClient()
-
-    versions = mlflow_client.search_model_versions(
-        f"name='{MODEL_NAME}'"
-    )
-
-    staging_versions = [
-        v for v in versions if v.current_stage == "Staging"
-    ]
+    versions = mlflow_client.search_model_versions(f"name='{MODEL_NAME}'")
+    staging_versions = [v for v in versions if v.current_stage == "Staging"]
 
     if not staging_versions:
-        logger.info("No staging model found.")
         return None
 
-    latest_staging = sorted(
-        staging_versions,
-        key=lambda x: int(x.version),
-        reverse=True
-    )[0]
+    return sorted(staging_versions, key=lambda x: int(x.version), reverse=True)[0]
 
-    logger.info(
-        f"Promoting model version {latest_staging.version} to Production"
+
+def promote_model_to_production(version_obj):
+    """Promote a specific already-identified staging version to Production."""
+    mlflow_client = MlflowClient()
+
+    logger.info(f"Promoting model version {version_obj.version} to Production")
+
+    mlflow_client.transition_model_version_stage(
+        name=MODEL_NAME,
+        version=version_obj.version,
+        stage="Production",
+        archive_existing_versions=True,
+    )
+
+    return version_obj.version
+
+
+def rollback_model_to_staging(version_obj):
+
+    mlflow_client = MlflowClient()
+
+    logger.warning(
+        f"Rolling back model version {version_obj.version} from Production → Staging"
     )
 
     mlflow_client.transition_model_version_stage(
         name=MODEL_NAME,
-        version=latest_staging.version,
-        stage="Production",
-        archive_existing_versions=True
+        version=version_obj.version,
+        stage="Staging",
+        archive_existing_versions=False,
     )
 
-    return latest_staging.version
+
+def restart_canary_deployment():
+
+    logger.info("Restarting canary deployment to load latest Staging model...")
+
+    config.load_incluster_config()
+    apps_v1 = client.AppsV1Api()
+
+    body = {
+        "spec": {
+            "template": {
+                "metadata": {
+                    "annotations": {
+                        "canary-restart": str(os.urandom(4))
+                    }
+                }
+            }
+        }
+    }
+
+    apps_v1.patch_namespaced_deployment(
+        name=CANARY_DEPLOYMENT,
+        namespace=NAMESPACE,
+        body=body,
+    )
+
+    logger.info("Canary deployment restarted.")
 
 
 def restart_stable_deployment():
@@ -113,7 +151,7 @@ def restart_stable_deployment():
     apps_v1.patch_namespaced_deployment(
         name=STABLE_DEPLOYMENT,
         namespace=NAMESPACE,
-        body=body
+        body=body,
     )
 
     logger.info("Stable deployment restarted.")
@@ -146,21 +184,30 @@ def evaluate_canary():
 
 
 def main():
-    version = promote_model_to_production()
-
-    if not version:
-        logger.info("Nothing to promote.")
+    staging_version = get_staging_version()
+    if not staging_version:
+        logger.info("No staging model found. Nothing to promote.")
         return
+
+    restart_canary_deployment()
+
+    version = promote_model_to_production(staging_version)
 
     safe = evaluate_canary()
 
     if safe:
+ 
         restart_stable_deployment()
         logger.info(
-            f"Model version {version} promoted to Production."
+            f"Model version {version} promoted and stable deployment updated."
         )
     else:
-        logger.warning("Canary failed evaluation. Promotion aborted.")
+
+        rollback_model_to_staging(staging_version)
+        logger.warning(
+            "Canary failed evaluation. MLflow rolled back to Staging. "
+            "Stable deployment untouched."
+        )
 
 
 if __name__ == "__main__":

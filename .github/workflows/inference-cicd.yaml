@@ -57,3 +57,10 @@ jobs:
           kubectl rollout restart deployment/inference-stable -n $NAMESPACE
           kubectl rollout status deployment/inference-stable \
             -n $NAMESPACE --timeout=120s
+
+
+      - name: Restart canary deployment
+        run: |
+          kubectl rollout restart deployment/inference-canary -n $NAMESPACE
+          kubectl rollout status deployment/inference-canary \
+            -n $NAMESPACE --timeout=120s
