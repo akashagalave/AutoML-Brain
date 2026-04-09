@@ -8,7 +8,7 @@ metadata:
 spec:
   selector:
     matchLabels:
-      app: inference
+      app: churn-inference
   namespaceSelector:
     matchNames:
       - automl-brain
