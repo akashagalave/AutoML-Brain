@@ -140,8 +140,7 @@ graph TB
         DeployAgent[Deployment Agent]
         GovAgent[Governance Agent]
     end
-
-    User --> Ingress --> API1
+   User --> Ingress --> API1
     User --> Ingress --> API2
 
     API1 --> Prometheus
@@ -153,6 +152,8 @@ graph TB
     DeployAgent --> API1
 
     Prometheus --> GovAgent
+
+
 ```
 
 
@@ -182,7 +183,6 @@ sequenceDiagram
     Canary->>Prom: Emit latency & errors
     Stable->>Prom: Emit latency & errors
     Prom->>Gov: Metrics polling
-    Gov: Final governance decision
 
 ```
 
