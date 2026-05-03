@@ -1,3 +1,4 @@
+
 name: AutoML Brain - Training Pipeline
 
 on:
@@ -58,3 +59,10 @@ jobs:
         run: |
           kubectl delete job retrain-job -n $NAMESPACE --ignore-not-found=true
           kubectl apply -f infrastructure/kubernetes/retraining/retrain-job.yaml
+      - name: Wait for retraining job to complete
+        run: |
+          kubectl wait --for=condition=complete job/retrain-job \
+          -n $NAMESPACE --timeout=1800s
+      - name: Run trigger deployment script
+        run: |
+          python serving/trigger_deployment.py
