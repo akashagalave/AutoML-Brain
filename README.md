@@ -27,7 +27,7 @@ It is an **end-to-end ML lifecycle, deployment, monitoring, and governance syste
 * Telecom subscriptions
 * Digital marketplaces
 
-The platform continuously **monitors, validates, deploys, governs, and explains itself** — with minimal human intervention.
+The platform continuously **monitors, validates, deploys, governs with minimal human intervention.
 
 ---
 
@@ -56,7 +56,7 @@ AutoML Brain introduces **production-first ML design**, combining:
 * Canary deployments with rollback
 * Latency & SLA monitoring
 * Rule-based ML governance agents
-* LLM-generated executive reports
+
 
 **Outcome:**
 ➡️ A **self-governing ML system** that is safe, observable, and scalable.
@@ -87,7 +87,6 @@ flowchart TD
     subgraph Agents
         Deploy[Deployment Agent]
         Gov[Governance Agent]
-        LLM[LLM Reporting Agent]
     end
 
     Client --> API
@@ -102,7 +101,6 @@ flowchart TD
     MLflow --> Deploy
     Deploy --> API
 
-    Gov --> LLM
 ```
 ---
 
@@ -141,7 +139,6 @@ graph TB
     subgraph Agents
         DeployAgent[Deployment Agent]
         GovAgent[Governance Agent]
-        LLMAgent[LLM Agent]
     end
 
     User --> Ingress --> API1
@@ -156,7 +153,6 @@ graph TB
     DeployAgent --> API1
 
     Prometheus --> GovAgent
-    GovAgent --> LLMAgent
 ```
 
 
@@ -176,7 +172,7 @@ sequenceDiagram
     participant Stable as Stable Deployment
     participant Prom as Prometheus
     participant Gov as Governance Agent
-    participant LLM as LLM Agent
+
 
     Data->>DVC: Version & track data
     DVC->>Train: dvc repro
@@ -186,8 +182,8 @@ sequenceDiagram
     Canary->>Prom: Emit latency & errors
     Stable->>Prom: Emit latency & errors
     Prom->>Gov: Metrics polling
-    Gov->>LLM: Final governance decision
-    LLM->>LLM: Generate JSON + PDF report
+    Gov: Final governance decision
+
 ```
 
 ---
@@ -269,22 +265,7 @@ These signals directly feed into **automated governance decisions**.
   * Rollback
   * Scale resources
 
----
 
-### 3️⃣ LLM Governance Agent
-
-**Purpose:** Executive-level visibility
-
-* Consumes:
-
-  * Model metrics
-  * Drift reports
-  * SHAP explanations
-  * Production SLAs
-* Produces:
-
-  * `deployment_report.json`
-  * `deployment_report.pdf`
 
 ---
 
@@ -318,7 +299,7 @@ These signals directly feed into **automated governance decisions**.
 * **Infra:** Docker, AWS EKS
 * **Monitoring:** Prometheus, Grafana
 * **Governance:** Rule-based agents
-* **LLM:** OpenAI (JSON-mode reports)
+
 
 ---
 
